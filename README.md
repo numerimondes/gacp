@@ -124,7 +124,7 @@ GACP automatically detects your project type and adjusts its behavior:
 - Java (Maven/Gradle)
 - C# (.NET projects)
 
-## Commands Reference 📋
+## Commands Reference 
 
 | Command | Description |
 |---------|-------------|
@@ -135,7 +135,7 @@ GACP automatically detects your project type and adjusts its behavior:
 | `gacp --update-now` | Update to latest version |
 | `gacp --install-now` | Install GACP globally |
 
-## File Change Indicators 🎨
+## File Change Indicators
 
 GACP shows clear indicators for different file states:
 
@@ -145,14 +145,14 @@ GACP shows clear indicators for different file states:
 - `R` Renamed files (cyan)
 - `?` Untracked files (blue)
 
-## Requirements 📋
+## Requirements
 
 - Git (obviously!)
 - Bash shell
 - curl (for installation and updates)
 - Terminal with color support (recommended)
 
-## Advanced Features 🚀
+## Advanced Features
 
 ### Auto-Update System
 GACP checks for updates and can automatically update itself:
