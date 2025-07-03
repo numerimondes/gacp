@@ -30,7 +30,7 @@ To group all changes into a single commit, simply run: ```bash gacp -g```
 
 > Updates still have some issues sometimes
 
-## Usage 📖
+## Usage
 
 ### Basic Usage
 
@@ -62,7 +62,7 @@ gacp                    # Automatically handles add, commit, and push
 gacp -g                 # Commits all changes in a single commit
 ```
 
-## How It Works 🔧
+## How It Works
 
 ### Intelligent Message Generation
 
@@ -98,7 +98,7 @@ refactor: update 3 controller classes
 chore: update package dependencies
 ```
 
-## Project Type Detection 🎯
+## Project Type Detection
 
 GACP automatically detects your project type and adjusts its behavior:
 
