@@ -1,7 +1,7 @@
 #!/bin/bash
+GACP_VERSION="1.1.0"
 
-GACP_VERSION="1.0.0"
-GACP_REPO_URL="https://raw.githubusercontent.com/numerimondes/gacp/main/gacp.sh"
+GACP_REPO_URL="https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gacp.sh"
 GACP_INSTALL_DIR="$HOME/.gacp"
 GACP_SCRIPT_PATH="$GACP_INSTALL_DIR/gacp.sh"
 
@@ -32,7 +32,7 @@ log_info() {
 }
 
 get_remote_version() {
-    curl -s "$GACP_REPO_URL" | grep -E "^GACP_VERSION=" | cut -d'"' -f2 2>/dev/null
+    curl -s "$GACP_REPO_URL" | head -n 5 | grep -E "^GACP_VERSION=" | cut -d'"' -f2 2>/dev/null
 }
 
 version_gt() {
@@ -60,6 +60,23 @@ check_for_updates() {
     fi
 }
 
+unset_gacp_functions() {
+    local functions_to_unset=(
+        "gacp" "is_conventional_commit" "log_error" "log_warning" "log_success" "log_info"
+        "generate_intelligent_message" "determine_commit_type" "show_file_changes"
+        "get_namespace_from_composer" "extract_class_name" "analyze_file_content"
+        "commit_individual_files" "show_help" "check_for_updates" "update_gacp"
+        "install_gacp" "get_remote_version" "version_gt" "unset_gacp_functions"
+    )
+    
+    for func in "${functions_to_unset[@]}"; do
+        unset -f "$func" 2>/dev/null || true
+    done
+    
+    unset GACP_REPO_URL GACP_INSTALL_DIR GACP_SCRIPT_PATH 2>/dev/null || true
+    unset RED GREEN YELLOW BLUE CYAN MAGENTA WHITE GRAY NC 2>/dev/null || true
+}
+
 update_gacp() {
     log_info "Updating gacp..."
     
@@ -68,14 +85,14 @@ update_gacp() {
     
     if curl -s "$GACP_REPO_URL" -o "$temp_file"; then
         local remote_version
-        remote_version=$(grep -E "^GACP_VERSION=" "$temp_file" | cut -d'"' -f2)
+        remote_version=$(head -n 5 "$temp_file" | grep -E "^GACP_VERSION=" | cut -d'"' -f2)
         
         if [[ -n "$remote_version" ]]; then
             mkdir -p "$GACP_INSTALL_DIR"
             cp "$temp_file" "$GACP_SCRIPT_PATH"
             chmod +x "$GACP_SCRIPT_PATH"
             
-            unset -f gacp is_conventional_commit log_error log_warning log_success generate_intelligent_message determine_commit_type 2>/dev/null
+            unset_gacp_functions
             source "$GACP_SCRIPT_PATH"
             
             log_success "Updated to version $remote_version"
@@ -98,7 +115,9 @@ install_gacp() {
     mkdir -p "$install_dir"
     
     if [[ "$0" != "$gacp_file" ]]; then
-        cp "$0" "$gacp_file"
+        cp "$0" "$gacp_file" 2>/dev/null || {
+            curl -s "$GACP_REPO_URL" -o "$gacp_file"
+        }
         chmod +x "$gacp_file"
     fi
     
@@ -116,10 +135,10 @@ install_gacp() {
         fi
     fi
     
-    unset -f gacp is_conventional_commit log_error log_warning log_success generate_intelligent_message determine_commit_type 2>/dev/null
+    unset_gacp_functions
     source "$gacp_file"
     
-    if command -v gacp >/dev/null 2>&1 && command -v determine_commit_type >/dev/null 2>&1 && command -v generate_intelligent_message >/dev/null 2>&1; then
+    if command -v gacp >/dev/null 2>&1; then
         log_success "gacp v$GACP_VERSION installed successfully!"
         log_info "Restart your terminal or run: source $gacp_file"
         log_info "Usage: gacp [-g] [-h] [-v] [--version] [--update-now]"
@@ -141,19 +160,46 @@ show_file_changes() {
     local status_color=""
     local change_indicator=""
     
-    if [[ "$additions" -gt 0 && "$deletions" -gt 0 ]]; then
-        status_color="${YELLOW}"
-        change_indicator="M"
-    elif [[ "$additions" -gt 0 ]]; then
-        status_color="${GREEN}"
-        change_indicator="A"
-    elif [[ "$deletions" -gt 0 ]]; then
-        status_color="${RED}"
-        change_indicator="D"
-    else
-        status_color="${GRAY}"
-        change_indicator="?"
-    fi
+    local git_status
+    git_status=$(git status --porcelain "$file" 2>/dev/null | cut -c1-2)
+    
+    case "$git_status" in
+        "M ")
+            status_color="${YELLOW}"
+            change_indicator="M"
+            ;;
+        "A ")
+            status_color="${GREEN}"
+            change_indicator="A"
+            ;;
+        "D ")
+            status_color="${RED}"
+            change_indicator="D"
+            ;;
+        "R ")
+            status_color="${CYAN}"
+            change_indicator="R"
+            ;;
+        "??")
+            status_color="${BLUE}"
+            change_indicator="?"
+            ;;
+        *)
+            if [[ "$additions" -gt 0 && "$deletions" -gt 0 ]]; then
+                status_color="${YELLOW}"
+                change_indicator="M"
+            elif [[ "$additions" -gt 0 ]]; then
+                status_color="${GREEN}"
+                change_indicator="A"
+            elif [[ "$deletions" -gt 0 ]]; then
+                status_color="${RED}"
+                change_indicator="D"
+            else
+                status_color="${GRAY}"
+                change_indicator="?"
+            fi
+            ;;
+    esac
     
     printf "  ${status_color}%s${NC} %s ${GREEN}+%d${NC} ${RED}-%d${NC}\n" \
         "$change_indicator" "$file" "$additions" "$deletions"
@@ -179,28 +225,35 @@ extract_class_name() {
 
 analyze_file_content() {
     local file="$1"
-    local diff_content="$2"
     
-    if [[ -f "$file" ]]; then
-        if echo "$diff_content" | grep -qE "^\+.*class\s+|^\+.*interface\s+|^\+.*trait\s+"; then
-            echo "new_class"
-        elif echo "$diff_content" | grep -qE "^\+.*function\s+|^\+.*public function\s+|^\+.*private function\s+|^\+.*protected function\s+"; then
-            echo "new_method"
-        elif echo "$diff_content" | grep -qE "^\+.*(belongsTo|hasMany|hasOne|belongsToMany|morphTo|morphMany)"; then
-            echo "relationship"
-        elif echo "$diff_content" | grep -qE "^\+.*fillable|^\+.*guarded|^\+.*casts"; then
-            echo "attributes"
-        elif echo "$diff_content" | grep -qE "^\+.*rules|^\+.*validate"; then
-            echo "validation"
-        elif echo "$diff_content" | grep -qE "^\+.*(where|join|select|insert|update|delete|create)"; then
-            echo "database"
-        elif echo "$diff_content" | grep -qE "^\+.*(fix|bug|error|exception|try|catch)"; then
-            echo "fix"
-        else
-            echo "update"
-        fi
-    else
+    if [[ ! -f "$file" ]]; then
         echo "new_file"
+        return
+    fi
+    
+    local diff_content
+    diff_content=$(git diff --cached "$file" 2>/dev/null)
+    
+    if [[ -z "$diff_content" ]]; then
+        diff_content=$(git diff "$file" 2>/dev/null)
+    fi
+    
+    if echo "$diff_content" | grep -qE "^\+.*class\s+|^\+.*interface\s+|^\+.*trait\s+"; then
+        echo "new_class"
+    elif echo "$diff_content" | grep -qE "^\+.*function\s+|^\+.*public function\s+|^\+.*private function\s+|^\+.*protected function\s+"; then
+        echo "new_method"
+    elif echo "$diff_content" | grep -qE "^\+.*(belongsTo|hasMany|hasOne|belongsToMany|morphTo|morphMany)"; then
+        echo "relationship"
+    elif echo "$diff_content" | grep -qE "^\+.*fillable|^\+.*guarded|^\+.*casts"; then
+        echo "attributes"
+    elif echo "$diff_content" | grep -qE "^\+.*rules|^\+.*validate"; then
+        echo "validation"
+    elif echo "$diff_content" | grep -qE "^\+.*(where|join|select|insert|update|delete|create)"; then
+        echo "database"
+    elif echo "$diff_content" | grep -qE "^\+.*(fix|bug|error|exception|try|catch)"; then
+        echo "fix"
+    else
+        echo "update"
     fi
 }
 
@@ -221,7 +274,7 @@ generate_intelligent_message() {
     
     if [[ "$file_count" -eq 1 ]]; then
         local file="$files"
-        local file_analysis=$(analyze_file_content "$file" "$diff_content")
+        local file_analysis=$(analyze_file_content "$file")
         
         if echo "$file" | grep -qE "/Models?/|Model\.php$"; then
             local class_name=$(extract_class_name "$file" "$namespace_prefix")
@@ -275,7 +328,9 @@ generate_intelligent_message() {
             local migration_name=$(echo "$file" | sed 's/.*_//g' | sed 's/\.php$//g')
             message="add $migration_name migration"
         elif echo "$file" | grep -qE "routes/"; then
-            if echo "$diff_content" | grep -qiE "Route::(get|post|put|patch|delete|resource)"; then
+            local route_diff
+            route_diff=$(git diff --cached "$file" 2>/dev/null || git diff "$file" 2>/dev/null)
+            if echo "$route_diff" | grep -qiE "Route::(get|post|put|patch|delete|resource)"; then
                 message="define new routes"
             else
                 message="update routing"
@@ -452,7 +507,7 @@ show_help() {
     echo -e "  ${BLUE}gacp --update-now${NC} # Update to latest version"
     echo ""
     echo -e "${WHITE}Installation:${NC}"
-    echo -e "  ${BLUE}curl -sL https://raw.githubusercontent.com/numerimondes/gacp/main/gacp.sh | bash${NC}"
+    echo -e "  ${BLUE}curl -sL https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gacp.sh | bash -s -- --install-now${NC}"
     echo ""
     echo -e "${WHITE}Features:${NC}"
     echo -e "  ${GREEN}*${NC} Intelligent commit message generation"
@@ -472,7 +527,7 @@ gacp() {
                 grouped=true
                 shift
                 ;;
-            -h)
+            -h|--help)
                 show_help
                 return 0
                 ;;
@@ -505,27 +560,24 @@ gacp() {
     echo -e "${BLUE}[gacp] Current git status:${NC}"
     git status --porcelain
     
-    if ! git add .; then
-        log_error "Failed to add files"
-        return 1
+    local modified_files deleted_files untracked_files
+    modified_files=$(git diff --name-only 2>/dev/null)
+    deleted_files=$(git diff --name-only --diff-filter=D 2>/dev/null)
+    untracked_files=$(git ls-files --others --exclude-standard 2>/dev/null)
+    
+    if [[ -n "$modified_files" || -n "$deleted_files" || -n "$untracked_files" ]]; then
+        if ! git add -A; then
+            log_error "Failed to add files"
+            return 1
+        fi
     fi
     
     local files
     files=$(git diff --cached --name-only 2>/dev/null)
     
     if [[ -z "$files" ]]; then
-        local untracked
-        untracked=$(git ls-files --others --exclude-standard)
-        if [[ -n "$untracked" ]]; then
-            log_info "Untracked files found, adding them..."
-            git add -A
-            files=$(git diff --cached --name-only 2>/dev/null)
-        fi
-        
-        if [[ -z "$files" ]]; then
-            log_info "No changes to commit"
-            return 0
-        fi
+        log_info "No changes to commit"
+        return 0
     fi
     
     local diff_stats diff_content
