@@ -1,6 +1,5 @@
 # GACP - Git Add Commit Push
-
-A one-word command from Heaven for your terminal that saves you time ⚡
+A one-word command from Heaven for your terminal that saves you time — add, commit, and push all in one go. 
 
 **GACP** is an intelligent Git automation tool that streamlines your development workflow. It automatically generates conventional commit messages and handles the full `git add`, `commit`, and `push` process — all in one go.
 
@@ -13,7 +12,8 @@ curl -sL https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gac
 ```
 <br>
 
-![gacp command adding committing and pushing every file with its own commit](art/og_image_gacp.png)
+<img src="art/og_image_gacp.png" alt="gacp command adding committing and pushing every file with its own commit">
+
 
 By default, **GACP** creates a separate commit for each modified file.
 To group all changes into a single commit, simply run: ```bash gacp -g```
