@@ -1,7 +1,5 @@
 # GACP - Git Add Commit Push
-A one-word command from Heaven for your terminal that saves you time — add, commit, and push all in one go. 
-
-**GACP** is an intelligent Git automation tool that streamlines your development workflow. It automatically generates conventional commit messages and handles the full `git add`, `commit`, and `push` process — all in one go.
+A one-word command from Heaven for your terminal that saves you time — add, commit, and push all in one go. **GACP** is an intelligent Git automation tool that streamlines your development workflow. It automatically generates conventional commit messages and handles the full `git add`, `commit`, and `push` process — all in one go.
 
 ## Installation
 
