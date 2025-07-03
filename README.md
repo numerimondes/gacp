@@ -66,4 +66,4 @@ gacp -h
 
 ## License
 
-MIT
+MPL-2.0 license
