@@ -1,5 +1,10 @@
 #!/bin/bash
 
+GACP_VERSION="1.0.0"
+GACP_REPO_URL="https://raw.githubusercontent.com/numerimondes/gacp/main/gacp.sh"
+GACP_INSTALL_DIR="$HOME/.gacp"
+GACP_SCRIPT_PATH="$GACP_INSTALL_DIR/gacp.sh"
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -9,45 +14,6 @@ MAGENTA='\033[0;35m'
 WHITE='\033[1;37m'
 GRAY='\033[0;37m'
 NC='\033[0m'
-
-install_gacp() {
-    local install_dir="$HOME/.gacp"
-    local gacp_file="$install_dir/gacp.sh"
-    local bashrc_file="$HOME/.bashrc"
-    local zshrc_file="$HOME/.zshrc"
-    
-    mkdir -p "$install_dir"
-    
-    if [[ "$0" != "$gacp_file" ]]; then
-        cp "$0" "$gacp_file"
-        chmod +x "$gacp_file"
-    fi
-    
-    local source_line="source ~/.gacp/gacp.sh"
-    
-    if [[ -f "$bashrc_file" ]]; then
-        if ! grep -q "source ~/.gacp/gacp.sh" "$bashrc_file"; then
-            echo "$source_line" >> "$bashrc_file"
-        fi
-    fi
-    
-    if [[ -f "$zshrc_file" ]]; then
-        if ! grep -q "source ~/.gacp/gacp.sh" "$zshrc_file"; then
-            echo "$source_line" >> "$zshrc_file"
-        fi
-    fi
-    
-    echo -e "${GREEN}gacp installed successfully!${NC}"
-    echo -e "${BLUE}Restart your terminal or run: source ~/.gacp/gacp.sh${NC}"
-    echo -e "${CYAN}Usage: gacp [-g] [-h]${NC}"
-    
-    source "$gacp_file"
-}
-
-is_conventional_commit() {
-    local message="$1"
-    [[ "$message" =~ ^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\(.+\))?!?:\ .+ ]]
-}
 
 log_error() {
     echo -e "${RED}[gacp] Error:${NC} $1" >&2
@@ -63,6 +29,109 @@ log_success() {
 
 log_info() {
     echo -e "${BLUE}[gacp] Info:${NC} $1"
+}
+
+get_remote_version() {
+    curl -s "$GACP_REPO_URL" | grep -E "^GACP_VERSION=" | cut -d'"' -f2 2>/dev/null
+}
+
+version_gt() {
+    test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1"
+}
+
+check_for_updates() {
+    local remote_version
+    remote_version=$(get_remote_version)
+    
+    if [[ -z "$remote_version" ]]; then
+        log_warning "Could not check for updates"
+        return 1
+    fi
+    
+    if version_gt "$remote_version" "$GACP_VERSION"; then
+        echo -e "${YELLOW}Update available: v$GACP_VERSION -> v$remote_version${NC}"
+        echo -n "Update now? (y/N): "
+        read -r response
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            update_gacp
+        fi
+    else
+        log_info "gacp is up to date (v$GACP_VERSION)"
+    fi
+}
+
+update_gacp() {
+    log_info "Updating gacp..."
+    
+    local temp_file
+    temp_file=$(mktemp)
+    
+    if curl -s "$GACP_REPO_URL" -o "$temp_file"; then
+        local remote_version
+        remote_version=$(grep -E "^GACP_VERSION=" "$temp_file" | cut -d'"' -f2)
+        
+        if [[ -n "$remote_version" ]]; then
+            mkdir -p "$GACP_INSTALL_DIR"
+            cp "$temp_file" "$GACP_SCRIPT_PATH"
+            chmod +x "$GACP_SCRIPT_PATH"
+            
+            unset -f gacp is_conventional_commit log_error log_warning log_success generate_intelligent_message determine_commit_type 2>/dev/null
+            source "$GACP_SCRIPT_PATH"
+            
+            log_success "Updated to version $remote_version"
+        else
+            log_error "Invalid remote version"
+        fi
+    else
+        log_error "Failed to download update"
+    fi
+    
+    rm -f "$temp_file"
+}
+
+install_gacp() {
+    local install_dir="$GACP_INSTALL_DIR"
+    local gacp_file="$GACP_SCRIPT_PATH"
+    local bashrc_file="$HOME/.bashrc"
+    local zshrc_file="$HOME/.zshrc"
+    
+    mkdir -p "$install_dir"
+    
+    if [[ "$0" != "$gacp_file" ]]; then
+        cp "$0" "$gacp_file"
+        chmod +x "$gacp_file"
+    fi
+    
+    local source_line="source $gacp_file"
+    
+    if [[ -f "$bashrc_file" ]]; then
+        if ! grep -q "source.*gacp.sh" "$bashrc_file"; then
+            echo "$source_line" >> "$bashrc_file"
+        fi
+    fi
+    
+    if [[ -f "$zshrc_file" ]]; then
+        if ! grep -q "source.*gacp.sh" "$zshrc_file"; then
+            echo "$source_line" >> "$zshrc_file"
+        fi
+    fi
+    
+    unset -f gacp is_conventional_commit log_error log_warning log_success generate_intelligent_message determine_commit_type 2>/dev/null
+    source "$gacp_file"
+    
+    if command -v gacp >/dev/null 2>&1 && command -v determine_commit_type >/dev/null 2>&1 && command -v generate_intelligent_message >/dev/null 2>&1; then
+        log_success "gacp v$GACP_VERSION installed successfully!"
+        log_info "Restart your terminal or run: source $gacp_file"
+        log_info "Usage: gacp [-g] [-h] [-v] [--version] [--update-now]"
+    else
+        log_error "Installation verification failed"
+        return 1
+    fi
+}
+
+is_conventional_commit() {
+    local message="$1"
+    [[ "$message" =~ ^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\(.+\))?!?:\ .+ ]]
 }
 
 show_file_changes() {
@@ -113,27 +182,18 @@ analyze_file_content() {
     local diff_content="$2"
     
     if [[ -f "$file" ]]; then
-        local content=$(cat "$file")
-        
-        # Check for new class/interface/trait
         if echo "$diff_content" | grep -qE "^\+.*class\s+|^\+.*interface\s+|^\+.*trait\s+"; then
             echo "new_class"
-        # Check for new methods
         elif echo "$diff_content" | grep -qE "^\+.*function\s+|^\+.*public function\s+|^\+.*private function\s+|^\+.*protected function\s+"; then
             echo "new_method"
-        # Check for relationship changes
         elif echo "$diff_content" | grep -qE "^\+.*(belongsTo|hasMany|hasOne|belongsToMany|morphTo|morphMany)"; then
             echo "relationship"
-        # Check for fillable/guarded changes
         elif echo "$diff_content" | grep -qE "^\+.*fillable|^\+.*guarded|^\+.*casts"; then
             echo "attributes"
-        # Check for validation rules
         elif echo "$diff_content" | grep -qE "^\+.*rules|^\+.*validate"; then
             echo "validation"
-        # Check for database queries
         elif echo "$diff_content" | grep -qE "^\+.*(where|join|select|insert|update|delete|create)"; then
             echo "database"
-        # Check for fixes
         elif echo "$diff_content" | grep -qE "^\+.*(fix|bug|error|exception|try|catch)"; then
             echo "fix"
         else
@@ -143,6 +203,7 @@ analyze_file_content() {
         echo "new_file"
     fi
 }
+
 generate_intelligent_message() {
     local files="$1"
     local diff_stats="$2"
@@ -224,7 +285,6 @@ generate_intelligent_message() {
             message="update $filename"
         fi
     else
-        # Multiple files
         local php_files=$(echo "$files" | grep -E "\.php$" | wc -l)
         local model_files=$(echo "$files" | grep -E "/Models?/|Model\.php$" | wc -l)
         local controller_files=$(echo "$files" | grep -E "/Controllers?/|Controller\.php$" | wc -l)
@@ -244,7 +304,6 @@ generate_intelligent_message() {
     fi
     
     echo "$message"
-}
 }
 
 determine_commit_type() {
@@ -374,33 +433,34 @@ commit_individual_files() {
 }
 
 show_help() {
-    echo -e "${CYAN}GACP - Git Add Commit Push${NC}"
+    echo -e "${CYAN}GACP v$GACP_VERSION - Git Add Commit Push${NC}"
     echo -e "${WHITE}A one-word command from Heaven for your terminal that saves you time${NC}"
     echo ""
     echo -e "${YELLOW}Usage:${NC} gacp [OPTION]"
     echo ""
     echo -e "${WHITE}Options:${NC}"
-    echo -e "  ${GREEN}-g${NC}    Group all changes into a single commit (default: individual commits)"
-    echo -e "  ${GREEN}-h${NC}    Show this help message"
+    echo -e "  ${GREEN}-g${NC}              Group all changes into a single commit (default: individual commits)"
+    echo -e "  ${GREEN}-h${NC}              Show this help message"
+    echo -e "  ${GREEN}-v, --version${NC}   Show version and check for updates"
+    echo -e "  ${GREEN}--update-now${NC}    Update gacp to the latest version"
+    echo -e "  ${GREEN}--install-now${NC}   Install gacp globally"
     echo ""
     echo -e "${WHITE}Examples:${NC}"
-    echo -e "  ${BLUE}gacp${NC}      # Commit files individually (default)"
-    echo -e "  ${BLUE}gacp -g${NC}   # Group all changes into one commit"
-    echo -e "  ${BLUE}gacp -h${NC}   # Show help"
+    echo -e "  ${BLUE}gacp${NC}            # Commit files individually (default)"
+    echo -e "  ${BLUE}gacp -g${NC}         # Group all changes into one commit"
+    echo -e "  ${BLUE}gacp -v${NC}         # Show version and check for updates"
+    echo -e "  ${BLUE}gacp --update-now${NC} # Update to latest version"
+    echo ""
+    echo -e "${WHITE}Installation:${NC}"
+    echo -e "  ${BLUE}curl -sL https://raw.githubusercontent.com/numerimondes/gacp/main/gacp.sh | bash${NC}"
     echo ""
     echo -e "${WHITE}Features:${NC}"
-    echo -e "  ${GREEN}•${NC} Intelligent commit message generation"
-    echo -e "  ${GREEN}•${NC} Conventional commits support"
-    echo -e "  ${GREEN}•${NC} Laravel/PHP project awareness"
-    echo -e "  ${GREEN}•${NC} Individual file commits by default"
-    echo -e "  ${GREEN}•${NC} Automatic upstream branch setup"
-    echo ""
-    echo -e "${WHITE}Smart Message Examples:${NC}"
-    echo -e "  ${MAGENTA}feat:${NC} add new User model with relationships"
-    echo -e "  ${MAGENTA}fix:${NC} resolve authentication controller validation"
-    echo -e "  ${MAGENTA}refactor:${NC} update UserService logic"
-    echo -e "  ${MAGENTA}feat:${NC} add database schema migrations"
-    echo -e "  ${MAGENTA}style:${NC} update stylesheets and UI design"
+    echo -e "  ${GREEN}*${NC} Intelligent commit message generation"
+    echo -e "  ${GREEN}*${NC} Conventional commits support"
+    echo -e "  ${GREEN}*${NC} Laravel/PHP project awareness"
+    echo -e "  ${GREEN}*${NC} Individual file commits by default"
+    echo -e "  ${GREEN}*${NC} Automatic upstream branch setup"
+    echo -e "  ${GREEN}*${NC} Auto-update functionality"
 }
 
 gacp() {
@@ -414,6 +474,19 @@ gacp() {
                 ;;
             -h)
                 show_help
+                return 0
+                ;;
+            -v|--version)
+                echo "gacp v$GACP_VERSION"
+                check_for_updates
+                return 0
+                ;;
+            --update-now)
+                update_gacp
+                return 0
+                ;;
+            --install-now)
+                install_gacp
                 return 0
                 ;;
             *)
@@ -527,23 +600,32 @@ gacp() {
     log_success "Changes pushed to remote repository"
 }
 
-if [[ "$1" == "--install-now" ]]; then
-    install_gacp
-    exit 0
-fi
-
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-    if [[ "$1" == "-h" ]]; then
-        show_help
-        exit 0
-    fi
-    
-    if git rev-parse --git-dir >/dev/null 2>&1; then
-        gacp "$@"
-    else
-        echo -e "${RED}Error:${NC} Not in a git repository"
-        echo -e "${CYAN}To install gacp globally, run:${NC}"
-        echo "  $0 --install-now"
-        exit 1
-    fi
+    case "$1" in
+        --install-now)
+            install_gacp
+            exit 0
+            ;;
+        -h|--help)
+            show_help
+            exit 0
+            ;;
+        -v|--version)
+            echo "gacp v$GACP_VERSION"
+            check_for_updates
+            exit 0
+            ;;
+        --update-now)
+            update_gacp
+            exit 0
+            ;;
+        *)
+            if git rev-parse --git-dir >/dev/null 2>&1; then
+                gacp "$@"
+            else
+                log_info "Installing gacp..."
+                install_gacp
+            fi
+            ;;
+    esac
 fi
