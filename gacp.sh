@@ -1,38 +1,48 @@
 #!/bin/bash
 GACP_VERSION="1.1.0"
 
-GACP_REPO_URL="https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gacp.sh"
-GACP_INSTALL_DIR="$HOME/.gacp"
-GACP_SCRIPT_PATH="$GACP_INSTALL_DIR/gacp.sh"
+# Constants
+readonly GACP_REPO_URL="https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gacp.sh"
+readonly GACP_INSTALL_DIR="$HOME/.gacp"
+readonly GACP_SCRIPT_PATH="$GACP_INSTALL_DIR/gacp.sh"
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
-MAGENTA='\033[0;35m'
-WHITE='\033[1;37m'
-GRAY='\033[0;37m'
-NC='\033[0m'
+# Color constants
+readonly RED='\033[0;31m'
+readonly GREEN='\033[0;32m'
+readonly YELLOW='\033[1;33m'
+readonly BLUE='\033[0;34m'
+readonly CYAN='\033[0;36m'
+readonly MAGENTA='\033[0;35m'
+readonly WHITE='\033[1;37m'
+readonly GRAY='\033[0;37m'
+readonly NC='\033[0m'
+
+# Message prefix constants
+readonly ERROR_PREFIX="${RED}[gacp] Error:${NC}"
+readonly WARNING_PREFIX="${YELLOW}[gacp] Warning:${NC}"
+readonly SUCCESS_PREFIX="${GREEN}[gacp] Success:${NC}"
+readonly INFO_PREFIX="${BLUE}[gacp] Info:${NC}"
 
 log_error() {
-    echo -e "${RED}[gacp] Error:${NC} $1" >&2
+    echo -e "${ERROR_PREFIX} $1" >&2
 }
 
 log_warning() {
-    echo -e "${YELLOW}[gacp] Warning:${NC} $1" >&2
+    echo -e "${WARNING_PREFIX} $1" >&2
 }
 
 log_success() {
-    echo -e "${GREEN}[gacp] Success:${NC} $1"
+    echo -e "${SUCCESS_PREFIX} $1"
 }
 
 log_info() {
-    echo -e "${BLUE}[gacp] Info:${NC} $1"
+    echo -e "${INFO_PREFIX} $1"
 }
 
 get_remote_version() {
-    curl -s "$GACP_REPO_URL" | head -n 5 | grep -E "^GACP_VERSION=" | cut -d'"' -f2 2>/dev/null
+    local remote_version
+    remote_version=$(curl -s "$GACP_REPO_URL" | head -n 5 | grep -E "^GACP_VERSION=" | cut -d'"' -f2 2>/dev/null)
+    echo "$remote_version"
 }
 
 version_gt() {
@@ -54,6 +64,8 @@ check_for_updates() {
         read -r response
         if [[ "$response" =~ ^[Yy]$ ]]; then
             update_gacp
+        else
+            log_info "Update canceled"
         fi
     else
         log_info "gacp is up to date (v$GACP_VERSION)"
@@ -75,6 +87,7 @@ unset_gacp_functions() {
     
     unset GACP_REPO_URL GACP_INSTALL_DIR GACP_SCRIPT_PATH 2>/dev/null || true
     unset RED GREEN YELLOW BLUE CYAN MAGENTA WHITE GRAY NC 2>/dev/null || true
+    unset ERROR_PREFIX WARNING_PREFIX SUCCESS_PREFIX INFO_PREFIX 2>/dev/null || true
 }
 
 update_gacp() {
@@ -83,26 +96,43 @@ update_gacp() {
     local temp_file
     temp_file=$(mktemp)
     
-    if curl -s "$GACP_REPO_URL" -o "$temp_file"; then
-        local remote_version
-        remote_version=$(head -n 5 "$temp_file" | grep -E "^GACP_VERSION=" | cut -d'"' -f2)
-        
-        if [[ -n "$remote_version" ]]; then
-            mkdir -p "$GACP_INSTALL_DIR"
-            cp "$temp_file" "$GACP_SCRIPT_PATH"
-            chmod +x "$GACP_SCRIPT_PATH"
-            
-            unset_gacp_functions
-            source "$GACP_SCRIPT_PATH"
-            
-            log_success "Updated to version $remote_version"
-        else
-            log_error "Invalid remote version"
-        fi
-    else
+    if ! curl -s "$GACP_REPO_URL" -o "$temp_file"; then
         log_error "Failed to download update"
+        rm -f "$temp_file"
+        return 1
     fi
     
+    local remote_version
+    remote_version=$(head -n 5 "$temp_file" | grep -E "^GACP_VERSION=" | cut -d'"' -f2)
+    
+    if [[ -z "$remote_version" ]]; then
+        log_error "Invalid remote version"
+        rm -f "$temp_file"
+        return 1
+    fi
+    
+    if ! mkdir -p "$GACP_INSTALL_DIR"; then
+        log_error "Failed to create installation directory"
+        rm -f "$temp_file"
+        return 1
+    fi
+    
+    if ! cp "$temp_file" "$GACP_SCRIPT_PATH"; then
+        log_error "Failed to copy updated script"
+        rm -f "$temp_file"
+        return 1
+    fi
+    
+    if ! chmod +x "$GACP_SCRIPT_PATH"; then
+        log_error "Failed to make script executable"
+        rm -f "$temp_file"
+        return 1
+    fi
+    
+    unset_gacp_functions
+    source "$GACP_SCRIPT_PATH"
+    
+    log_success "Updated to version $remote_version"
     rm -f "$temp_file"
 }
 
@@ -112,40 +142,76 @@ install_gacp() {
     local bashrc_file="$HOME/.bashrc"
     local zshrc_file="$HOME/.zshrc"
     
-    mkdir -p "$install_dir"
+    log_info "Installing gacp..."
     
+    if ! mkdir -p "$install_dir"; then
+        log_error "Failed to create installation directory: $install_dir"
+        return 1
+    fi
+    
+    # Copy or download the script
     if [[ "$0" != "$gacp_file" ]]; then
-        cp "$0" "$gacp_file" 2>/dev/null || {
-            curl -s "$GACP_REPO_URL" -o "$gacp_file"
-        }
-        chmod +x "$gacp_file"
+        if ! cp "$0" "$gacp_file" 2>/dev/null; then
+            log_info "Downloading gacp script..."
+            if ! curl -s "$GACP_REPO_URL" -o "$gacp_file"; then
+                log_error "Failed to download gacp script"
+                return 1
+            fi
+        fi
+    fi
+    
+    if ! chmod +x "$gacp_file"; then
+        log_error "Failed to make script executable"
+        return 1
     fi
     
     local source_line="source $gacp_file"
+    local shell_updated=false
     
+    # Update shell configuration files
     if [[ -f "$bashrc_file" ]]; then
         if ! grep -q "source.*gacp.sh" "$bashrc_file"; then
             echo "$source_line" >> "$bashrc_file"
+            shell_updated=true
+            log_info "Added gacp to ~/.bashrc"
         fi
     fi
     
     if [[ -f "$zshrc_file" ]]; then
         if ! grep -q "source.*gacp.sh" "$zshrc_file"; then
             echo "$source_line" >> "$zshrc_file"
+            shell_updated=true
+            log_info "Added gacp to ~/.zshrc"
         fi
     fi
     
+    # Load gacp in current shell session
     unset_gacp_functions
-    source "$gacp_file"
+    if ! source "$gacp_file"; then
+        log_error "Failed to load gacp functions"
+        return 1
+    fi
     
-    if command -v gacp >/dev/null 2>&1; then
-        log_success "gacp v$GACP_VERSION installed successfully!"
-        log_info "Restart your terminal or run: source $gacp_file"
-        log_info "Usage: gacp [-g] [-h] [-v] [--version] [--update-now]"
-    else
+    # Verify installation
+    if ! command -v gacp >/dev/null 2>&1; then
         log_error "Installation verification failed"
         return 1
     fi
+    
+    log_success "gacp v$GACP_VERSION installed successfully!"
+    
+    if [[ "$shell_updated" == true ]]; then
+        log_info "To use gacp in future terminal sessions, restart your terminal or run:"
+        if [[ -f "$bashrc_file" ]]; then
+            echo "  source ~/.bashrc"
+        fi
+        if [[ -f "$zshrc_file" ]]; then
+            echo "  source ~/.zshrc"
+        fi
+    fi
+    
+    log_info "You can now use gacp in this terminal session"
+    log_info "Usage: gacp [-g] [-h] [-v] [--version] [--update-now]"
 }
 
 is_conventional_commit() {
@@ -443,7 +509,10 @@ commit_individual_files() {
     echo "$files" | while IFS= read -r file; do
         [[ -z "$file" ]] && continue
         
-        git reset HEAD >/dev/null 2>&1
+        if ! git reset HEAD >/dev/null 2>&1; then
+            log_error "Failed to reset staging area"
+            continue
+        fi
         
         if ! git add "$file"; then
             log_error "Failed to stage $file"
@@ -652,6 +721,7 @@ gacp() {
     log_success "Changes pushed to remote repository"
 }
 
+# Main execution logic
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     case "$1" in
         --install-now)
@@ -675,8 +745,8 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             if git rev-parse --git-dir >/dev/null 2>&1; then
                 gacp "$@"
             else
-                log_info "Installing gacp..."
-                install_gacp
+                log_error "Not in a git repository. Use 'gacp --install-now' to install gacp globally."
+                exit 1
             fi
             ;;
     esac
