@@ -183,7 +183,7 @@ gacp  # Automatically runs: git push -u origin branch-name
 gacp  # Simple: git push
 ```
 
-## Troubleshooting 🔧
+## Troubleshooting
 
 ### Not in a Git Repository
 If you're not in a git repository, GACP will show helpful guidance:
