@@ -90,6 +90,59 @@ show_file_changes() {
         "$change_indicator" "$file" "$additions" "$deletions"
 }
 
+get_namespace_from_composer() {
+    local composer_file="composer.json"
+    if [[ -f "$composer_file" ]]; then
+        grep -oE '"[^"]*":\s*"[^"]*"' "$composer_file" | grep -E "App\\\\|src\\\\|lib\\\\" | head -1 | cut -d'"' -f4 | sed 's/\\\\/\//g'
+    fi
+}
+
+extract_class_name() {
+    local file="$1"
+    local namespace_prefix="$2"
+    
+    if [[ -n "$namespace_prefix" ]]; then
+        echo "$file" | sed "s|${namespace_prefix}/||g" | sed 's|/|\\|g' | sed 's|\.php$||g'
+    else
+        basename "$file" .php
+    fi
+}
+
+analyze_file_content() {
+    local file="$1"
+    local diff_content="$2"
+    
+    if [[ -f "$file" ]]; then
+        local content=$(cat "$file")
+        
+        # Check for new class/interface/trait
+        if echo "$diff_content" | grep -qE "^\+.*class\s+|^\+.*interface\s+|^\+.*trait\s+"; then
+            echo "new_class"
+        # Check for new methods
+        elif echo "$diff_content" | grep -qE "^\+.*function\s+|^\+.*public function\s+|^\+.*private function\s+|^\+.*protected function\s+"; then
+            echo "new_method"
+        # Check for relationship changes
+        elif echo "$diff_content" | grep -qE "^\+.*(belongsTo|hasMany|hasOne|belongsToMany|morphTo|morphMany)"; then
+            echo "relationship"
+        # Check for fillable/guarded changes
+        elif echo "$diff_content" | grep -qE "^\+.*fillable|^\+.*guarded|^\+.*casts"; then
+            echo "attributes"
+        # Check for validation rules
+        elif echo "$diff_content" | grep -qE "^\+.*rules|^\+.*validate"; then
+            echo "validation"
+        # Check for database queries
+        elif echo "$diff_content" | grep -qE "^\+.*(where|join|select|insert|update|delete|create)"; then
+            echo "database"
+        # Check for fixes
+        elif echo "$diff_content" | grep -qE "^\+.*(fix|bug|error|exception|try|catch)"; then
+            echo "fix"
+        else
+            echo "update"
+        fi
+    else
+        echo "new_file"
+    fi
+}
 generate_intelligent_message() {
     local files="$1"
     local diff_stats="$2"
@@ -102,145 +155,96 @@ generate_intelligent_message() {
     additions=$(echo "$diff_stats" | awk '{sum+=$1} END {print sum+0}')
     deletions=$(echo "$diff_stats" | awk '{sum+=$2} END {print sum+0}')
     
-    local file_suffix=""
+    local namespace_prefix
+    namespace_prefix=$(get_namespace_from_composer)
+    
     if [[ "$file_count" -eq 1 ]]; then
-        file_suffix="file"
-    else
-        file_suffix="files"
-    fi
-    
-    if echo "$files" | grep -qiE "(filament|Filament)"; then
-        if [[ "$additions" -gt $((deletions * 3)) ]]; then
-            message="implement new Filament components and features"
-        elif [[ "$deletions" -gt $((additions * 2)) ]]; then
-            message="remove unused Filament components"
-        else
-            message="update Filament admin interface"
-        fi
-    elif echo "$files" | grep -qE "/Models?/|Model\.php$"; then
-        local model_files=$(echo "$files" | grep -E "/Models?/|Model\.php$")
-        local model_count=$(echo "$model_files" | wc -l)
-        if [[ "$model_count" -eq 1 ]]; then
-            local model_name=$(echo "$model_files" | sed 's/.*\///g' | sed 's/\.php$//g')
-            if [[ "$additions" -gt $((deletions * 3)) ]]; then
-                message="add new ${model_name} model with relationships"
-            elif echo "$diff_content" | grep -qiE "(fillable|guarded|casts|dates)"; then
-                message="configure ${model_name} model attributes"
-            elif echo "$diff_content" | grep -qiE "(belongsTo|hasMany|hasOne|belongsToMany)"; then
-                message="define ${model_name} model relationships"
+        local file="$files"
+        local file_analysis=$(analyze_file_content "$file" "$diff_content")
+        
+        if echo "$file" | grep -qE "/Models?/|Model\.php$"; then
+            local class_name=$(extract_class_name "$file" "$namespace_prefix")
+            case "$file_analysis" in
+                "new_class"|"new_file")
+                    message="add $class_name model"
+                    ;;
+                "relationship")
+                    message="define $class_name model relationships"
+                    ;;
+                "attributes")
+                    message="configure $class_name model attributes"
+                    ;;
+                "validation")
+                    message="add $class_name model validation"
+                    ;;
+                *)
+                    message="update $class_name model"
+                    ;;
+            esac
+        elif echo "$file" | grep -qE "/Controllers?/|Controller\.php$"; then
+            local class_name=$(extract_class_name "$file" "$namespace_prefix")
+            case "$file_analysis" in
+                "new_class"|"new_file")
+                    message="add $class_name controller"
+                    ;;
+                "new_method")
+                    message="implement $class_name methods"
+                    ;;
+                "validation")
+                    message="add $class_name validation logic"
+                    ;;
+                "database")
+                    message="implement $class_name database operations"
+                    ;;
+                *)
+                    message="update $class_name controller"
+                    ;;
+            esac
+        elif echo "$file" | grep -qE "/Services?/|Service\.php$"; then
+            local class_name=$(extract_class_name "$file" "$namespace_prefix")
+            case "$file_analysis" in
+                "new_class"|"new_file")
+                    message="add $class_name service"
+                    ;;
+                *)
+                    message="update $class_name service"
+                    ;;
+            esac
+        elif echo "$file" | grep -qE "database/migrations/"; then
+            local migration_name=$(echo "$file" | sed 's/.*_//g' | sed 's/\.php$//g')
+            message="add $migration_name migration"
+        elif echo "$file" | grep -qE "routes/"; then
+            if echo "$diff_content" | grep -qiE "Route::(get|post|put|patch|delete|resource)"; then
+                message="define new routes"
             else
-                message="update ${model_name} model structure"
+                message="update routing"
             fi
         else
-            message="update multiple model definitions"
+            local filename=$(basename "$file")
+            message="update $filename"
         fi
-    elif echo "$files" | grep -qE "/Controllers?/|Controller\.php$"; then
-        local controller_files=$(echo "$files" | grep -E "/Controllers?/|Controller\.php$")
-        local controller_count=$(echo "$controller_files" | wc -l)
-        if [[ "$controller_count" -eq 1 ]]; then
-            local controller_name=$(echo "$controller_files" | sed 's/.*\///g' | sed 's/Controller\.php$//g')
-            if [[ "$additions" -gt $((deletions * 3)) ]]; then
-                message="implement ${controller_name}Controller logic"
-            elif echo "$diff_content" | grep -qiE "(index|show|store|update|destroy)"; then
-                message="add CRUD operations to ${controller_name}Controller"
-            elif echo "$diff_content" | grep -qiE "(authorize|validate|request)"; then
-                message="add validation and authorization to ${controller_name}Controller"
-            else
-                message="refactor ${controller_name}Controller methods"
-            fi
-        else
-            message="update controller implementations"
-        fi
-    elif echo "$files" | grep -qE "/Services?/|Service\.php$"; then
-        local service_files=$(echo "$files" | grep -E "/Services?/|Service\.php$")
-        local service_count=$(echo "$service_files" | wc -l)
-        if [[ "$service_count" -eq 1 ]]; then
-            local service_name=$(echo "$service_files" | sed 's/.*\///g' | sed 's/Service\.php$//g')
-            message="implement ${service_name}Service logic"
-        else
-            message="update service layer implementations"
-        fi
-    elif echo "$files" | grep -qE "database/migrations/"; then
-        local migration_files=$(echo "$files" | grep -E "database/migrations/")
-        local migration_count=$(echo "$migration_files" | wc -l)
-        if [[ "$migration_count" -eq 1 ]]; then
-            local migration_name=$(echo "$migration_files" | sed 's/.*_//g' | sed 's/\.php$//g')
-            message="add ${migration_name} database migration"
-        else
-            message="add database schema migrations"
-        fi
-    elif echo "$files" | grep -qE "routes/"; then
-        if echo "$diff_content" | grep -qiE "(get|post|put|patch|delete|resource)"; then
-            message="define new API routes and endpoints"
-        else
-            message="update routing configuration"
-        fi
-    elif echo "$files" | grep -qE "resources/views/"; then
-        local view_files=$(echo "$files" | grep -E "resources/views/")
-        if echo "$view_files" | grep -qE "\.blade\.php$"; then
-            message="update Blade templates and views"
-        else
-            message="update view templates"
-        fi
-    elif echo "$files" | grep -qE "resources/js/|resources/css/"; then
-        if echo "$files" | grep -qE "\.vue$"; then
-            message="update Vue.js components"
-        elif echo "$files" | grep -qE "\.js$|\.ts$"; then
-            message="update JavaScript functionality"
-        elif echo "$files" | grep -qE "\.css$|\.scss$"; then
-            message="update stylesheets and UI design"
-        else
-            message="update frontend assets"
-        fi
-    elif echo "$files" | grep -qE "config/"; then
-        local config_files=$(echo "$files" | grep -E "config/")
-        if [[ $(echo "$config_files" | wc -l) -eq 1 ]]; then
-            local config_name=$(echo "$config_files" | sed 's/.*\///g' | sed 's/\.php$//g')
-            message="configure ${config_name} settings"
-        else
-            message="update application configuration"
-        fi
-    elif echo "$files" | grep -qiE "(test|spec)" || echo "$files" | grep -qE "tests/|Tests/"; then
-        if echo "$diff_content" | grep -qiE "(test|assert|expect)"; then
-            message="add comprehensive test coverage"
-        else
-            message="update test suite"
-        fi
-    elif echo "$files" | grep -qE "\.md$|readme|README"; then
-        message="update project documentation"
-    elif echo "$files" | grep -qE "composer\.(json|lock)"; then
-        if echo "$diff_content" | grep -qiE "(require|autoload)"; then
-            message="update Composer dependencies"
-        else
-            message="update package configuration"
-        fi
-    elif echo "$files" | grep -qE "package\.(json|lock)"; then
-        message="update npm dependencies"
-    elif echo "$files" | grep -qE "\.env|\.env\."; then
-        message="update environment configuration"
-    elif echo "$files" | grep -qE "\.github/|\.gitlab-ci|docker|Docker"; then
-        message="update CI/CD pipeline configuration"
-    elif echo "$files" | grep -qE "webpack|vite|gulpfile|rollup"; then
-        message="update build system configuration"
     else
-        if echo "$files" | grep -qE "\.php$" && [[ "$file_count" -gt 10 ]]; then
-            message="major PHP codebase refactoring"
-        elif echo "$files" | grep -qE "\.php$"; then
-            message="update PHP implementation"
-        elif echo "$files" | grep -qE "\.(js|ts|vue|jsx|tsx|svelte)$"; then
-            message="update frontend JavaScript code"
-        elif echo "$files" | grep -qE "\.(css|scss|sass)$"; then
-            message="update stylesheet design"
+        # Multiple files
+        local php_files=$(echo "$files" | grep -E "\.php$" | wc -l)
+        local model_files=$(echo "$files" | grep -E "/Models?/|Model\.php$" | wc -l)
+        local controller_files=$(echo "$files" | grep -E "/Controllers?/|Controller\.php$" | wc -l)
+        local migration_files=$(echo "$files" | grep -E "database/migrations/" | wc -l)
+        
+        if [[ "$model_files" -gt 1 ]]; then
+            message="update $model_files models"
+        elif [[ "$controller_files" -gt 1 ]]; then
+            message="update $controller_files controllers"
+        elif [[ "$migration_files" -gt 1 ]]; then
+            message="add $migration_files migrations"
+        elif [[ "$php_files" -gt 5 ]]; then
+            message="major codebase refactor"
         else
-            message="update project files"
+            message="update $file_count files"
         fi
-    fi
-    
-    if [[ "$file_count" -gt 1 ]]; then
-        message="${message} (${file_count} ${file_suffix})"
     fi
     
     echo "$message"
+}
 }
 
 determine_commit_type() {
@@ -529,6 +533,11 @@ if [[ "$1" == "--install-now" ]]; then
 fi
 
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
+    if [[ "$1" == "-h" ]]; then
+        show_help
+        exit 0
+    fi
+    
     if git rev-parse --git-dir >/dev/null 2>&1; then
         gacp "$@"
     else
