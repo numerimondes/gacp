@@ -1,5 +1,5 @@
 #!/bin/bash
-GACP_VERSION="0.0.2"
+GACP_VERSION="0.0.3"
 
 # Constants
 readonly GACP_REPO_URL="https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gacp.sh"
@@ -205,6 +205,11 @@ install_gacp() {
     fi
     
     log_success "gacp v$GACP_VERSION installed successfully!"
+
+    if [[ -f "$HOME/.gacp/gacp.sh" ]]; then
+        source "$HOME/.gacp/gacp.sh"
+    fi
+    
     
     if [[ "$shell_updated" == true ]]; then
         log_info "To use gacp in future terminal sessions, restart your terminal or run:"
@@ -745,11 +750,7 @@ show_help() {
 }
 
 gacp() {
-    # Source automatique à chaque appel
-    if [[ -f "$HOME/.gacp/gacp.sh" ]]; then
-        source "$HOME/.gacp/gacp.sh"
-    fi
-    
+
     local grouped=false
     while [[ $# -gt 0 ]]; do
         case $1 in
