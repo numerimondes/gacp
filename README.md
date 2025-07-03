@@ -218,19 +218,15 @@ If auto-update fails, reinstall:
 curl -sL https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gacp.sh -o gacp.sh && chmod +x gacp.sh && ./gacp.sh --install-now
 ```
 
-## Contributing 🤝
+## Contributing
 
 GACP is open source and welcomes contributions! The project follows conventional commits and maintains high code quality standards.
 
-## Version 📋
-
-Current version: **v0.0.3**
-
-## License 📄
+## License
 
 MIT License - feel free to use GACP in your projects!
 
-## Credits 💝
+## Credits
 
 **El Moumen Yassine**
 **yassine@numerimondes.com**
