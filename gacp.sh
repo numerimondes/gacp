@@ -1,5 +1,5 @@
 #!/bin/bash
-GACP_VERSION="0.0.4"
+GACP_VERSION="0.0.5"
 
 # Constants
 readonly GACP_REPO_URL="https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gacp.sh"
@@ -457,9 +457,6 @@ generate_intelligent_message() {
     local project_type
     project_type=$(detect_project_structure)
     
-    local namespace_prefix
-    namespace_prefix=$(get_psr4_namespace)
-    
     if [[ "$file_count" -eq 1 ]]; then
         local file="$files"
         local file_analysis
@@ -769,11 +766,13 @@ commit_individual_files() {
     while IFS= read -r file; do
         [[ -z "$file" ]] && continue
         
+        # Reset staging area before processing each file
         if ! git reset HEAD >/dev/null 2>&1; then
             log_error "Failed to reset staging area"
             continue
         fi
         
+        # Check if file exists in working directory or is staged for deletion
         local git_file_status
         git_file_status=$(git status --porcelain "$file" 2>/dev/null)
         
@@ -781,32 +780,38 @@ commit_individual_files() {
             continue
         fi
         
+        # Stage the specific file
         if ! git add "$file" 2>/dev/null; then
             log_error "Failed to stage $file"
             continue
         fi
         
+        # Get diff stats and content for this specific file
         local file_diff_stats file_diff_content
         file_diff_stats=$(git diff --cached --numstat "$file" 2>/dev/null)
         file_diff_content=$(git diff --cached "$file" 2>/dev/null)
         
+        # Skip if no changes to commit
         if [[ -z "$file_diff_stats" && -z "$file_diff_content" ]]; then
             continue
         fi
         
+        # Parse additions and deletions
         local additions deletions
-        additions=$(echo "$file_diff_stats" | awk '{print $1}')
-        deletions=$(echo "$file_diff_stats" | awk '{print $2}')
+        additions=$(echo "$file_diff_stats" | awk '{print $1}' | head -1)
+        deletions=$(echo "$file_diff_stats" | awk '{print $2}' | head -1)
         
         [[ "$additions" =~ ^[0-9]+$ ]] || additions=0
         [[ "$deletions" =~ ^[0-9]+$ ]] || deletions=0
         
+        # Generate commit type and message
         local file_type file_message
         file_type=$(determine_commit_type "$file" "$file_diff_stats" "$file_diff_content")
         file_message=$(generate_intelligent_message "$file" "$file_diff_stats" "$file_diff_content" "$file_type" "1")
         
         local suggested_commit="${file_type}: ${file_message}"
         
+        # Show file information
         echo ""
         echo -e "${WHITE}File:${NC} $file"
         show_file_changes "$file" "$additions" "$deletions"
@@ -815,6 +820,7 @@ commit_individual_files() {
         echo -n "Press Enter to accept, or type custom message: "
         read -r user_input
         
+        # Determine final commit message
         local final_message
         if [[ -z "$user_input" ]]; then
             final_message="$suggested_commit"
@@ -824,6 +830,7 @@ commit_individual_files() {
             final_message="${file_type}: ${user_input}"
         fi
         
+        # Commit the staged changes
         if git commit -m "$final_message"; then
             log_success "Committed: $final_message"
         else
@@ -906,6 +913,7 @@ gacp() {
     echo -e "${BLUE}[gacp] Current git status:${NC}"
     git status --porcelain
     
+    # Check if there are any changes
     local has_changes=false
     if git diff --quiet && git diff --cached --quiet; then
         if [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
@@ -915,6 +923,7 @@ gacp() {
         has_changes=true
     fi
     
+    # Add all changes
     if [[ "$has_changes" == true ]]; then
         if ! git add -A 2>/dev/null; then
             log_error "Failed to add files"
@@ -922,6 +931,7 @@ gacp() {
         fi
     fi
     
+    # Get list of files to commit
     local files
     files=$(git diff --cached --name-only 2>/dev/null)
     if [[ -z "$files" ]]; then
@@ -946,6 +956,7 @@ gacp() {
     done <<< "$diff_stats"
     
     if [[ "$grouped" == true ]]; then
+        # Group commit logic
         local auto_prefix
         auto_prefix=$(determine_commit_type "$files" "$diff_stats" "$diff_content")
         local intelligent_message
@@ -971,9 +982,11 @@ gacp() {
         fi
         log_success "Committed: $final_message"
     else
+        # Individual commits - this is the default behavior
         commit_individual_files "$files"
     fi
     
+    # Push changes to remote
     if ! git remote >/dev/null 2>&1; then
         log_warning "No remote repository configured"
         return 0
@@ -986,6 +999,7 @@ gacp() {
         return 0
     fi
     
+    # Check if upstream is set, if not set it
     if ! git rev-parse --abbrev-ref --symbolic-full-name @{u} >/dev/null 2>&1; then
         log_info "Setting upstream for branch: $current_branch"
         if ! git push -u origin "$current_branch"; then
@@ -993,6 +1007,7 @@ gacp() {
             return 1
         fi
     else
+        # Push all commits
         if ! git push; then
             log_error "Failed to push changes"
             return 1
