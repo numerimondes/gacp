@@ -1,5 +1,5 @@
 #!/bin/bash
-GACP_VERSION="0.0.11"
+GACP_VERSION="0.0.12"
 
 # Constants
 readonly GACP_REPO_URL="https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gacp.sh"
@@ -74,7 +74,7 @@ check_for_updates() {
         echo -n "Update now? (y/N): "
         read -r response
         if [[ "$response" =~ ^[Yy]$ ]]; then
-            update_gacp
+            update_gacp "$remote_version"
         else
             log_info "Update canceled"
         fi
@@ -84,6 +84,17 @@ check_for_updates() {
 }
 
 update_gacp() {
+    local new_version="$1"
+    
+    echo ""
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${CYAN}                    GACP UPDATE                           ${NC}"
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${YELLOW}Current version in this shell:${NC} ${RED}v$GACP_VERSION${NC}"
+    echo -e "${YELLOW}New version available:${NC}        ${GREEN}v$new_version${NC}"
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+    echo ""
+    
     log_info "Updating gacp..."
     
     # Remove old installation
@@ -143,11 +154,24 @@ update_gacp() {
         log_info "Added gacp to ~/.zshrc"
     fi
     
-    log_success "Updated to latest version"
+    log_success "Updated to latest version (v$new_version)"
     echo ""
-    echo -e "${YELLOW}ATTENTION:${NC} The new version will not work in this terminal session."
-    echo -e "${BLUE}Please open a new terminal tab/window to use the updated gacp.${NC}"
-    echo ""    
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${YELLOW}                  IMPORTANT NOTICE ${NC}"
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+    echo -e "${RED}This shell is still running the old version (v$GACP_VERSION)${NC}"
+    echo -e "${GREEN}The new version (v$new_version) is now installed globally${NC}"
+    echo ""
+    echo -e "${YELLOW}To use the new version:${NC}"
+    echo -e "  ${BLUE}1. Open a new terminal tab/window${NC}"
+    echo -e "  ${BLUE}2. Or restart your current shell with: exec \$SHELL${NC}"
+    echo -e "  ${BLUE}3. Or source your shell config: source ~/.bashrc (or ~/.zshrc)${NC}"
+    echo ""
+    echo -e "${YELLOW}To verify the update worked:${NC}"
+    echo -e "  ${BLUE}gacp -v${NC}"
+    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+    echo ""
+    
     rm -f "$temp_file"
 }
 
@@ -210,7 +234,13 @@ gacp() {
                 return 0
                 ;;
             --update-now)
-                update_gacp
+                local remote_version
+                remote_version=$(get_remote_version)
+                if [[ -n "$remote_version" ]]; then
+                    update_gacp "$remote_version"
+                else
+                    log_error "Could not retrieve remote version"
+                fi
                 return 0
                 ;;
             --install-now)
