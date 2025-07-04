@@ -1,5 +1,5 @@
 #!/bin/bash
-GACP_VERSION="0.0.13"
+GACP_VERSION="0.0.14"
 
 # Constants
 readonly GACP_REPO_URL="https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gacp.sh"
@@ -59,6 +59,7 @@ get_remote_version() {
 version_gt() {
     test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1"
 }
+
 
 check_for_updates() {
     local remote_version
