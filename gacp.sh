@@ -1,5 +1,5 @@
 #!/bin/bash
-GACP_VERSION="0.0.10"
+GACP_VERSION="0.0.11"
 
 # Constants
 readonly GACP_REPO_URL="https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gacp.sh"
@@ -38,14 +38,9 @@ show_help() {
     echo -e "${YELLOW}Usage:${NC} gacp [OPTION]"
     echo ""
     echo -e "${YELLOW}Options:${NC}"
-    echo -e "  ${GREEN}-h, --help${NC}      Show this help message"
-    echo -e "  ${GREEN}-v, --version${NC}   Show version and check for updates"
-    echo -e "  ${GREEN}--update-now${NC}    Update gacp to the latest version"
-    echo ""
-    echo -e "${YELLOW}Examples:${NC}"
-    echo -e "  ${BLUE}gacp${NC}            # Add all changes and commit"
-    echo -e "  ${BLUE}gacp -v${NC}         # Show version and check for updates"
-    echo -e "  ${BLUE}gacp --update-now${NC} # Update to latest version"
+    echo -e "  ${GREEN}-h, --help${NC}         Show this help message"
+    echo -e "  ${GREEN}-v, --version${NC}      Show version and check for updates"
+    echo -e "  ${GREEN}--update-now${NC}       Update gacp to the latest version"
     echo ""
     echo -e "${YELLOW}Features:${NC}"
     echo -e "  • Simple Git Workflow: Add, commit, push in one command"
