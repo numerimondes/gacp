@@ -1,5 +1,5 @@
 #!/bin/bash
-GACP_VERSION="0.0.3"
+GACP_VERSION="0.0.4"
 
 # Constants
 readonly GACP_REPO_URL="https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gacp.sh"
@@ -321,8 +321,10 @@ detect_project_structure() {
         project_type="go"
     elif [[ -f "pom.xml" || -f "build.gradle" ]]; then
         project_type="java"
-    elif [[ -f ".csproj" || -f ".sln" ]]; then
+    elif [[ -f "*.csproj" || -f "*.sln" ]]; then
         project_type="csharp"
+    elif [[ -f "Makefile" ]]; then
+        project_type="c"
     fi
     
     echo "$project_type"
@@ -382,6 +384,11 @@ analyze_file_content() {
         diff_content=$(git diff "$file" 2>/dev/null)
     fi
     
+    if [[ -z "$diff_content" ]]; then
+        echo "no_changes"
+        return
+    fi
+    
     case "$project_type" in
         "php")
             if echo "$diff_content" | grep -qE "^\+.*class\s+|^\+.*interface\s+|^\+.*trait\s+"; then
@@ -390,14 +397,18 @@ analyze_file_content() {
                 echo "new_method"
             elif echo "$diff_content" | grep -qE "^\+.*(belongsTo|hasMany|hasOne|belongsToMany|morphTo|morphMany)"; then
                 echo "relationship"
-            elif echo "$diff_content" | grep -qE "^\+.*fillable|^\+.*guarded|^\+.*casts"; then
+            elif echo "$diff_content" | grep -qE "^\+.*fillable|^\+.*guarded|^\+.*casts|^\+.*protected \$"; then
                 echo "attributes"
-            elif echo "$diff_content" | grep -qE "^\+.*rules|^\+.*validate"; then
+            elif echo "$diff_content" | grep -qE "^\+.*rules|^\+.*validate|^\+.*Rule::"; then
                 echo "validation"
-            elif echo "$diff_content" | grep -qE "^\+.*(where|join|select|insert|update|delete|create)"; then
+            elif echo "$diff_content" | grep -qE "^\+.*(DB::|Query|Builder|where|join|select|insert|update|delete|create)"; then
                 echo "database"
-            elif echo "$diff_content" | grep -qE "^\+.*(fix|bug|error|exception|try|catch)"; then
+            elif echo "$diff_content" | grep -qE "^\+.*(fix|bug|error|exception|try|catch|throw)"; then
                 echo "fix"
+            elif echo "$diff_content" | grep -qE "^\+.*(Route::|route|middleware|auth)"; then
+                echo "routing"
+            elif echo "$diff_content" | grep -qE "^\+.*(config|env|setting|option)"; then
+                echo "config"
             else
                 echo "update"
             fi
@@ -407,8 +418,12 @@ analyze_file_content() {
                 echo "new_class"
             elif echo "$diff_content" | grep -qE "^\+.*function\s+|^\+.*const\s+.*=\s+.*=>|^\+.*=\s+.*function"; then
                 echo "new_function"
-            elif echo "$diff_content" | grep -qE "^\+.*import\s+|^\+.*require\s*\("; then
+            elif echo "$diff_content" | grep -qE "^\+.*import\s+|^\+.*require\s*\(|^\+.*from\s+"; then
                 echo "dependency"
+            elif echo "$diff_content" | grep -qE "^\+.*(useState|useEffect|useCallback|useMemo)"; then
+                echo "hooks"
+            elif echo "$diff_content" | grep -qE "^\+.*<.*>|^\+.*jsx|^\+.*tsx"; then
+                echo "component"
             else
                 echo "update"
             fi
@@ -416,6 +431,10 @@ analyze_file_content() {
         *)
             if echo "$diff_content" | grep -qE "^\+.*(fix|bug|error|exception)"; then
                 echo "fix"
+            elif echo "$diff_content" | grep -qE "^\+.*(test|spec|describe|it\(|expect)"; then
+                echo "test"
+            elif echo "$diff_content" | grep -qE "^\+.*(config|setting|option)"; then
+                echo "config"
             else
                 echo "update"
             fi
@@ -446,134 +465,211 @@ generate_intelligent_message() {
         local file_analysis
         file_analysis=$(analyze_file_content "$file" "$project_type")
         
+        local filename
+        filename=$(basename "$file")
+        local dirname
+        dirname=$(dirname "$file")
+        
         case "$project_type" in
             "php")
                 if echo "$file" | grep -qE "/Models?/|Model\.php$"; then
-                    local class_name
-                    class_name=$(extract_class_name "$file" "$namespace_prefix" "$project_type")
+                    local model_name
+                    model_name=$(basename "$file" .php)
                     case "$file_analysis" in
                         "new_class"|"new_file")
-                            message="add $class_name model"
+                            message="add $model_name model"
                             ;;
                         "relationship")
-                            message="define $class_name model relationships"
+                            message="add $model_name model relationships"
                             ;;
                         "attributes")
-                            message="configure $class_name model attributes"
+                            message="configure $model_name model attributes"
                             ;;
                         "validation")
-                            message="add $class_name model validation rules"
+                            message="add $model_name validation rules"
                             ;;
                         *)
-                            message="update $class_name model"
+                            message="update $model_name model"
                             ;;
                     esac
                 elif echo "$file" | grep -qE "/Controllers?/|Controller\.php$"; then
-                    local class_name
-                    class_name=$(extract_class_name "$file" "$namespace_prefix" "$project_type")
+                    local controller_name
+                    controller_name=$(basename "$file" .php | sed 's/Controller$//')
                     case "$file_analysis" in
                         "new_class"|"new_file")
-                            message="add $class_name controller"
+                            message="add $controller_name controller"
                             ;;
                         "new_method")
-                            message="implement $class_name controller methods"
+                            message="implement $controller_name controller methods"
                             ;;
                         "validation")
-                            message="add $class_name validation logic"
+                            message="add $controller_name validation logic"
                             ;;
                         "database")
-                            message="implement $class_name database operations"
+                            message="add $controller_name database operations"
+                            ;;
+                        "routing")
+                            message="update $controller_name routing logic"
                             ;;
                         *)
-                            message="update $class_name controller"
+                            message="update $controller_name controller"
                             ;;
                     esac
                 elif echo "$file" | grep -qE "/Services?/|Service\.php$"; then
-                    local class_name
-                    class_name=$(extract_class_name "$file" "$namespace_prefix" "$project_type")
+                    local service_name
+                    service_name=$(basename "$file" .php | sed 's/Service$//')
                     case "$file_analysis" in
                         "new_class"|"new_file")
-                            message="add $class_name service"
+                            message="add $service_name service"
                             ;;
                         *)
-                            message="update $class_name service logic"
+                            message="update $service_name service logic"
                             ;;
                     esac
                 elif echo "$file" | grep -qE "/Repositories?/|Repository\.php$"; then
-                    local class_name
-                    class_name=$(extract_class_name "$file" "$namespace_prefix" "$project_type")
+                    local repo_name
+                    repo_name=$(basename "$file" .php | sed 's/Repository$//')
                     case "$file_analysis" in
                         "new_class"|"new_file")
-                            message="add $class_name repository"
+                            message="add $repo_name repository"
                             ;;
                         *)
-                            message="update $class_name repository methods"
+                            message="update $repo_name repository methods"
                             ;;
                     esac
                 elif echo "$file" | grep -qE "database/migrations/"; then
                     local migration_name
-                    migration_name=$(echo "$file" | sed 's/.*_//g' | sed 's/\.php$//g')
-                    message="add $migration_name migration"
-                elif echo "$file" | grep -qE "routes/"; then
-                    local route_diff
-                    route_diff=$(git diff --cached "$file" 2>/dev/null || git diff "$file" 2>/dev/null)
-                    if echo "$route_diff" | grep -qiE "Route::(get|post|put|patch|delete|resource)"; then
-                        message="define new API routes"
+                    migration_name=$(basename "$file" .php | sed 's/^[0-9_]*//g')
+                    case "$file_analysis" in
+                        "new_file")
+                            message="add $migration_name migration"
+                            ;;
+                        *)
+                            message="update $migration_name migration"
+                            ;;
+                    esac
+                elif echo "$file" | grep -qE "/Helpers?/|helpers?\.php$"; then
+                    local helper_context
+                    if echo "$dirname" | grep -qE "/(Assets|DateTime|Discovery|Lang|Panel|Platform|Resources|Views)"; then
+                        helper_context=$(echo "$dirname" | sed 's|.*/||' | tr '[:upper:]' '[:lower:]')
+                        case "$file_analysis" in
+                            "new_file")
+                                message="add $helper_context helper functions"
+                                ;;
+                            "new_method")
+                                message="implement $helper_context helper methods"
+                                ;;
+                            *)
+                                message="update $helper_context helper functions"
+                                ;;
+                        esac
                     else
-                        message="update routing configuration"
+                        case "$file_analysis" in
+                            "new_file")
+                                message="add helper functions"
+                                ;;
+                            *)
+                                message="update helper functions"
+                                ;;
+                        esac
                     fi
+                elif echo "$file" | grep -qE "routes/"; then
+                    case "$file_analysis" in
+                        "routing")
+                            message="add new routes"
+                            ;;
+                        *)
+                            message="update routing configuration"
+                            ;;
+                    esac
                 elif echo "$file" | grep -qE "/Console/"; then
-                    local class_name
-                    class_name=$(extract_class_name "$file" "$namespace_prefix" "$project_type")
-                    message="update $class_name console command"
+                    local command_name
+                    command_name=$(basename "$file" .php | sed 's/Command$//')
+                    message="update $command_name console command"
                 elif echo "$file" | grep -qE "/Middleware/"; then
-                    local class_name
-                    class_name=$(extract_class_name "$file" "$namespace_prefix" "$project_type")
-                    message="update $class_name middleware"
+                    local middleware_name
+                    middleware_name=$(basename "$file" .php | sed 's/Middleware$//')
+                    message="update $middleware_name middleware"
+                elif echo "$file" | grep -qE "config/"; then
+                    local config_name
+                    config_name=$(basename "$file" .php)
+                    message="update $config_name configuration"
                 else
-                    local filename
-                    filename=$(basename "$file")
-                    message="update $filename"
+                    case "$file_analysis" in
+                        "new_file")
+                            message="add $filename"
+                            ;;
+                        *)
+                            message="update $filename"
+                            ;;
+                    esac
                 fi
                 ;;
             "node")
                 if echo "$file" | grep -qE "\.(js|ts|jsx|tsx)$"; then
-                    local filename
-                    filename=$(basename "$file" | sed 's/\.[^.]*$//')
+                    local component_name
+                    component_name=$(basename "$file" | sed 's/\.[^.]*$//')
                     case "$file_analysis" in
-                        "new_class"|"new_file")
-                            message="add $filename component"
+                        "new_file")
+                            message="add $component_name component"
+                            ;;
+                        "component")
+                            message="update $component_name component"
+                            ;;
+                        "hooks")
+                            message="add $component_name hooks"
                             ;;
                         "new_function")
-                            message="implement $filename functions"
+                            message="implement $component_name functions"
                             ;;
                         *)
-                            message="update $filename logic"
+                            message="update $component_name logic"
                             ;;
                     esac
                 elif echo "$file" | grep -qE "package\.json"; then
                     message="update package dependencies"
+                elif echo "$file" | grep -qE "\.config\.|webpack|vite|rollup"; then
+                    message="update build configuration"
                 else
-                    local filename
-                    filename=$(basename "$file")
-                    message="update $filename"
+                    case "$file_analysis" in
+                        "new_file")
+                            message="add $filename"
+                            ;;
+                        *)
+                            message="update $filename"
+                            ;;
+                    esac
                 fi
                 ;;
             *)
-                local filename
-                filename=$(basename "$file")
-                message="update $filename"
+                case "$file_analysis" in
+                    "new_file")
+                        message="add $filename"
+                        ;;
+                    "test")
+                        message="update $filename tests"
+                        ;;
+                    "config")
+                        message="update $filename configuration"
+                        ;;
+                    *)
+                        message="update $filename"
+                        ;;
+                esac
                 ;;
         esac
     else
-        # Multiple files
-        local php_files model_files controller_files migration_files
+        # Multiple files logic
+        local php_files model_files controller_files migration_files helper_files
         php_files=$(echo "$files" | grep -E "\.php$" | wc -l)
         model_files=$(echo "$files" | grep -E "/Models?/|Model\.php$" | wc -l)
         controller_files=$(echo "$files" | grep -E "/Controllers?/|Controller\.php$" | wc -l)
         migration_files=$(echo "$files" | grep -E "database/migrations/" | wc -l)
+        helper_files=$(echo "$files" | grep -E "/Helpers?/|helpers?\.php$" | wc -l)
         
-        if [[ "$model_files" -gt 1 ]]; then
+        if [[ "$helper_files" -gt 1 ]]; then
+            message="update $helper_files helper modules"
+        elif [[ "$model_files" -gt 1 ]]; then
             message="update $model_files model classes"
         elif [[ "$controller_files" -gt 1 ]]; then
             message="update $controller_files controller classes"
@@ -603,30 +699,12 @@ determine_commit_type() {
     
     # Fix detection takes priority
     if echo "$files" | grep -qiE "(fix|bug|patch|hotfix)" || \
-       echo "$diff_content" | grep -qiE "(fix|bug|error|issue|exception)"; then
+       echo "$diff_content" | grep -qiE "^\+.*(fix|bug|error|issue|exception|throw|catch)"; then
         type="fix"
-    # Feature detection
-    elif echo "$files" | grep -qE "/Models?/|Model\.php$|models?/" || \
-         echo "$files" | grep -qE "/Controllers?/|Controller\.php$|controllers?/" || \
-         echo "$files" | grep -qE "/Services?/|Service\.php$|services?/" || \
-         echo "$files" | grep -qE "database/migrations/|migrations/" || \
-         echo "$files" | grep -qE "routes/|Routes/"; then
-        if [[ "$additions" -gt $((deletions * 2)) ]]; then
-            type="feat"
-        else
-            type="refactor"
-        fi
-    # Filament specific
-    elif echo "$files" | grep -qiE "(filament|Filament)" || \
-         echo "$files" | grep -qE "/Filament/|filament/|resources/views/filament/"; then
-        if [[ "$additions" -gt $((deletions * 2)) ]]; then
-            type="feat"
-        else
-            type="refactor"
-        fi
     # Test files
     elif echo "$files" | grep -qiE "(test|spec|Test\.php|\.test\.|\.spec\.)" || \
-         echo "$files" | grep -qE "tests/|Tests/|__tests__/|spec/"; then
+         echo "$files" | grep -qE "tests/|Tests/|__tests__/|spec/" || \
+         echo "$diff_content" | grep -qE "^\+.*(test|spec|describe|it\(|expect|assert)"; then
         type="test"
     # Documentation
     elif echo "$files" | grep -qiE "\.(md|txt|rst)$|readme|doc|changelog"; then
@@ -637,18 +715,36 @@ determine_commit_type() {
     # Build files
     elif echo "$files" | grep -qE "composer\.(json|lock)|package\.(json|lock)|webpack\.mix\.js|vite\.config\.js|gulpfile|gruntfile|rollup\.config|tsconfig\.json"; then
         type="build"
-    # Configuration
-    elif echo "$files" | grep -qE "config/|Config/|\.env|\.env\."; then
-        type="chore"
     # Performance
-    elif echo "$diff_content" | grep -qiE "(cache|optimize|performance|speed|query|perf)"; then
+    elif echo "$diff_content" | grep -qiE "^\+.*(cache|optimize|performance|speed|query|perf)"; then
         type="perf"
     # Styling
     elif echo "$files" | grep -qE "\.(css|scss|sass|less|styl)$"; then
         type="style"
+    # Configuration
+    elif echo "$files" | grep -qE "config/|Config/|\.env|\.env\.|settings"; then
+        type="chore"
+    # Feature detection for specific patterns
+    elif echo "$files" | grep -qE "/Models?/|Model\.php$|models?/" || \
+         echo "$files" | grep -qE "/Controllers?/|Controller\.php$|controllers?/" || \
+         echo "$files" | grep -qE "/Services?/|Service\.php$|services?/" || \
+         echo "$files" | grep -qE "/Helpers?/|helpers?\.php$" || \
+         echo "$files" | grep -qE "database/migrations/|migrations/" || \
+         echo "$files" | grep -qE "routes/|Routes/"; then
+        if [[ "$additions" -gt $((deletions * 2)) ]]; then
+            type="feat"
+        elif [[ "$deletions" -gt $((additions * 2)) ]]; then
+            type="refactor"
+        else
+            type="refactor"
+        fi
     # Frontend files
     elif echo "$files" | grep -qE "\.(js|ts|vue|jsx|tsx|svelte)$"; then
-        type="feat"
+        if [[ "$additions" -gt $((deletions * 2)) ]]; then
+            type="feat"
+        else
+            type="refactor"
+        fi
     # PHP files (general)
     elif echo "$files" | grep -qE "\.php$"; then
         if [[ "$additions" -gt $((deletions * 2)) ]]; then
@@ -660,7 +756,6 @@ determine_commit_type() {
     
     echo "$type"
 }
-
 
 commit_individual_files() {
     local files="$1"
@@ -679,11 +774,6 @@ commit_individual_files() {
             continue
         fi
         
-        local file_exists=false
-        if [[ -f "$file" ]]; then
-            file_exists=true
-        fi
-        
         local git_file_status
         git_file_status=$(git status --porcelain "$file" 2>/dev/null)
         
@@ -700,7 +790,7 @@ commit_individual_files() {
         file_diff_stats=$(git diff --cached --numstat "$file" 2>/dev/null)
         file_diff_content=$(git diff --cached "$file" 2>/dev/null)
         
-        if [[ -z "$file_diff_stats" ]]; then
+        if [[ -z "$file_diff_stats" && -z "$file_diff_content" ]]; then
             continue
         fi
         
