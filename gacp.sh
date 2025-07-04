@@ -1,5 +1,5 @@
 #!/bin/bash
-GACP_VERSION="0.0.6"
+GACP_VERSION="0.0.1"
 
 # Constants
 readonly GACP_REPO_URL="https://raw.githubusercontent.com/numerimondes/gacp/main/gacp.sh"
@@ -100,15 +100,18 @@ check_for_updates() {
     fi
     
     if version_gt "$remote_version" "$GACP_VERSION"; then
+        echo ""
         echo -e "${YELLOW}Update available: v$GACP_VERSION -> v$remote_version${NC}"
         echo -n "Update now? (y/N): "
         read -r response
         if [[ "$response" =~ ^[Yy]$ ]]; then
             update_gacp "$remote_version"
         else
+            echo ""
             log_info "Update canceled"
         fi
     else
+        echo ""
         log_info "gacp is up to date (v$GACP_VERSION)"
     fi
 }
@@ -190,6 +193,7 @@ install_gacp() {
     local bashrc_file="$HOME/.bashrc"
     local zshrc_file="$HOME/.zshrc"
     
+    echo ""
     log_info "Installing gacp..."
     
     mkdir -p "$install_dir"
@@ -218,12 +222,16 @@ install_gacp() {
     
     source "$gacp_file"
     
+    echo ""
     log_success "gacp v$GACP_VERSION installed successfully!"
+    echo ""
     echo -n "Restart shell now? (Y/n): "
     read -r response
     if [[ "$response" =~ ^[Nn]$ ]]; then
+        echo ""
         echo -e "${BLUE}[gacp -> info]${NC} Run 'exec \$SHELL' when ready"
     else
+        echo ""
         echo -e "${BLUE}[gacp -> info]${NC} Restarting shell..."
         exec $SHELL
     fi
@@ -271,6 +279,7 @@ gacp() {
     
     # Check if there are any changes
     if git diff --quiet && git diff --cached --quiet && [[ -z "$(git ls-files --others --exclude-standard)" ]]; then
+        echo ""
         log_info "No changes to commit"
         return 0
     fi
@@ -286,6 +295,7 @@ gacp() {
         git commit
     elif [[ $changed_files -gt 1 ]]; then
         # Multiple files, ask user
+        echo ""
         echo -e "${YELLOW}Multiple files edited. Edit commit message? (y/N)${NC}"
         read -r response
         if [[ "$response" =~ ^[Yy]$ ]]; then
