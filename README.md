@@ -1,4 +1,5 @@
 # GACP - Git Add Commit Push
+
 A one-word command from Heaven for your terminal that saves you time — add, commit, and push all in one go. **GACP** is an intelligent Git automation tool that streamlines your development workflow. It automatically generates conventional commit messages and handles the full `git add`, `commit`, and `push` process — all in one go.
 
 ## Installation
@@ -6,223 +7,207 @@ A one-word command from Heaven for your terminal that saves you time — add, co
 ### Quick One-Line Installer
 
 ```bash
-curl -sL https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gacp.sh -o gacp.sh && chmod +x gacp.sh && ./gacp.sh --install-now
+curl -sL https://raw.githubusercontent.com/numerimondes/gacp/main/gacp.sh -o gacp.sh && chmod +x gacp.sh && ./gacp.sh --install-now
 ```
+
 <br>
 
 <img src="art/og_image_gacp.png" alt="gacp command adding committing and pushing every file with its own commit">
 
 
-By default, **GACP** creates a separate commit for each modified file.
-To group all changes into a single commit, simply run: ```bash gacp -g```
+### Manual Installation
 
-## Features
+1. Download the script:
+   ```bash
+   wget https://raw.githubusercontent.com/numerimondes/gacp/main/gacp.sh
+   ```
 
-- **Intelligent Commit Messages**: Automatically generates meaningful commit messages based on file changes
-- **Conventional Commits**: Supports and enforces conventional commit standards
-- **Project Awareness**: Smart detection for Laravel/PHP, Node.js, Python, and other project types
-- **Individual File Commits**: Commits files individually by default for better history tracking
-- **Automatic Branch Setup**: Handles upstream branch configuration automatically
-- **Auto-Update**: Built-in update mechanism to keep GACP current
-- **Colorized Output**: Beautiful, informative terminal output with color coding
+2. Make it executable:
+   ```bash
+   chmod +x gacp.sh
+   ```
 
-> Updates still have some issues sometimes
+3. Install it:
+   ```bash
+   ./gacp.sh --install-now
+   ```
 
 ## Usage
 
 ### Basic Usage
 
-```bash
-gacp                    # Commit files individually (default)
-gacp -g                 # Group all changes into a single commit
-gacp -h                 # Show help message
-gacp -v                 # Show version and check for updates
-gacp --update-now       # Update to latest version
-```
+Simply run `gacp` in any Git repository:
 
-### Getting Started
-
-1. **Initialize a new repository:**
 ```bash
-git init
-git add .
 gacp
 ```
 
-2. **In an existing repository:**
-```bash
-# Make your changes
-gacp                    # Automatically handles add, commit, and push
-```
+This will:
+1. Add all changes (`git add -A`)
+2. Commit with an appropriate message
+3. Push to the remote repository
 
-3. **Group multiple changes:**
-```bash
-gacp -g                 # Commits all changes in a single commit
-```
-
-## How It Works
-
-### Intelligent Message Generation
-
-GACP analyzes your changes and generates appropriate commit messages:
-
-- **PHP/Laravel Projects**: Detects models, controllers, services, migrations, and routes
-- **Node.js Projects**: Recognizes components, functions, and dependencies
-- **General Projects**: Analyzes file types and change patterns
-
-### Conventional Commits
-
-All generated messages follow conventional commit standards:
-
-- `feat:` for new features
-- `fix:` for bug fixes
-- `docs:` for documentation
-- `style:` for formatting changes
-- `refactor:` for code refactoring
-- `test:` for adding tests
-- `chore:` for maintenance tasks
-
-### Example Outputs
+### Command Options
 
 ```bash
-# Single file changes
-feat: add User model
-fix: resolve authentication middleware issue
-docs: update API documentation
+gacp [OPTION]
 
-# Multiple file changes
-feat: implement user authentication system
-refactor: update 3 controller classes
-chore: update package dependencies
+Options:
+  -h, --help         Show help message
+  -v, --version      Show version and check for updates
+  -e, --edit         Force edit commit message
+  --update-now       Update gacp to the latest version
 ```
 
-## Project Type Detection
+### Examples
 
-GACP automatically detects your project type and adjusts its behavior:
+```bash
+# Basic usage - add, commit, push everything
+gacp
 
-### PHP/Laravel (made for)
-- Models, Controllers, Services, Repositories
-- Migrations, Routes, Middleware
-- Composer dependencies
-- PSR-4 namespace awareness
+# Force edit commit message
+gacp -e
 
-### Node.js
-- Components, Functions, Classes
-- Package.json changes
-- Import/require statements
+# Check version and updates
+gacp -v
 
-### Python
-- Classes, Functions, Modules
-- Requirements.txt, setup.py
-- Virtual environment files
+# Show help
+gacp -h
+```
 
-### Other Supported Types
-- Rust (Cargo.toml)
-- Go (go.mod)
-- Java (Maven/Gradle)
-- C# (.NET projects)
+## Features
 
-## Commands Reference 
+### Intelligent Commit Handling
 
-| Command | Description |
-|---------|-------------|
-| `gacp` | Default: commit files individually |
-| `gacp -g` | Group all changes into single commit |
-| `gacp -h` | Show help message |
-| `gacp -v` | Show version and check for updates |
-| `gacp --update-now` | Update to latest version |
-| `gacp --install-now` | Install GACP globally |
+- **Single file changes**: Uses `--no-edit` for quick commits
+- **Multiple file changes**: Prompts to edit commit message
+- **Force edit mode**: Use `-e` flag to always edit commit message
 
-## File Change Indicators
+### Smart Repository Detection
 
-GACP shows clear indicators for different file states:
+- Automatically detects if you're in a Git repository
+- Checks for changes before attempting to commit
+- Handles both tracked and untracked files
 
-- `M` Modified files (yellow)
-- `A` Added files (green)
-- `D` Deleted files (red)
-- `R` Renamed files (cyan)
-- `?` Untracked files (blue)
+### Remote Repository Support
+
+- Automatically pushes to existing remotes
+- Sets up upstream tracking for new branches
+- Gracefully handles repositories without remotes
+
+### Self-Updating
+
+- Built-in version checking
+- Automatic updates with `--update-now`
+- Cache-busting for reliable downloads
+
+## Workflow
+
+1. **Change Detection**: Checks for modified, staged, and untracked files
+2. **Add All Changes**: Runs `git add -A` to stage everything
+3. **Smart Commit**: 
+   - Single file: Quick commit with `--no-edit`
+   - Multiple files: Option to edit commit message
+   - Force edit: Always opens editor with `-e` flag
+4. **Push**: Automatically pushes to remote repository
+
+## Installation Details
+
+GACP installs itself to `~/.gacp/gacp.sh` and adds itself to your shell configuration:
+
+- **Bash**: Adds to `~/.bashrc`
+- **Zsh**: Adds to `~/.zshrc`
+
+After installation, restart your shell or run:
+```bash
+exec $SHELL
+```
 
 ## Requirements
 
-- Git (obviously!)
-- Bash shell
+- Git (obviously)
+- Bash or Zsh
 - curl (for installation and updates)
-- Terminal with color support (recommended)
+- Internet connection (for installation and updates)
 
-## Advanced Features
+## Uninstallation
 
-### Auto-Update System
-GACP checks for updates and can automatically update itself:
+To remove GACP:
 
-```bash
-gacp -v                 # Check for updates
-gacp --update-now       # Force update
-```
+1. Remove the installation directory:
+   ```bash
+   rm -rf ~/.gacp
+   ```
 
-### Custom Commit Messages
-You can always override the generated message:
+2. Remove from shell configuration:
+   ```bash
+   # For Bash
+   sed -i '/source.*gacp\.sh/d' ~/.bashrc
+   
+   # For Zsh
+   sed -i '/source.*gacp\.sh/d' ~/.zshrc
+   ```
 
-```bash
-# GACP will prompt for custom message
-gacp
-# > Generated: feat: add User model
-# > Press Enter to accept, or type custom message: fix: resolve user validation
-```
-
-### Branch Management
-GACP automatically handles upstream branch setup:
-
-```bash
-# First push to new branch
-gacp  # Automatically runs: git push -u origin branch-name
-
-# Subsequent pushes
-gacp  # Simple: git push
-```
+3. Restart your shell:
+   ```bash
+   exec $SHELL
+   ```
 
 ## Troubleshooting
 
-### Not in a Git Repository
-If you're not in a git repository, GACP will show helpful guidance:
+### Command Not Found
 
-```bash
-# Initialize new repository
-git init
-git add .
-gacp
+If `gacp` command is not found after installation:
 
-# Clone existing repository
-git clone <repository-url>
-cd <repository-name>
-gacp
-```
+1. Check if it's in your shell config:
+   ```bash
+   grep gacp ~/.bashrc ~/.zshrc
+   ```
 
-### Installation Issues
-If installation fails, try manual installation:
+2. Manually source the script:
+   ```bash
+   source ~/.gacp/gacp.sh
+   ```
 
-```bash
-# Download and install manually
-curl -sL https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gacp.sh -o ~/.gacp/gacp.sh
-chmod +x ~/.gacp/gacp.sh
-echo 'source ~/.gacp/gacp.sh' >> ~/.bashrc
-source ~/.bashrc
-```
+3. Restart your shell:
+   ```bash
+   exec $SHELL
+   ```
 
 ### Update Issues
-If auto-update fails, reinstall:
 
-```bash
-curl -sL https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gacp.sh -o gacp.sh && chmod +x gacp.sh && ./gacp.sh --install-now
-```
+If updates fail:
+
+1. Check internet connection
+2. Try manual reinstallation:
+   ```bash
+   curl -sL https://raw.githubusercontent.com/numerimondes/gacp/main/gacp.sh -o gacp.sh && chmod +x gacp.sh && ./gacp.sh --install-now
+   ```
+
+### Git Repository Issues
+
+- Make sure you're in a Git repository: `git status`
+- Check if you have a remote configured: `git remote -v`
+- Ensure you have proper Git credentials set up
 
 ## Contributing
 
-GACP is open source and welcomes contributions! The project follows conventional commits and maintains high code quality standards.
+Contributions are welcome! Please feel free to submit issues, feature requests, or pull requests.
 
 ## License
 
-MIT License - feel free to use GACP in your projects!
+This project is open source and available under the [MPL-2.0 license](LICENSE).
+
+## Version History
+
+- **v0.0.1**: Latest development version
+
+## Support
+
+For issues and questions:
+- Open an issue on GitHub
+- Check the troubleshooting section above
+- Review the help output: `gacp -h`
 
 ## Credits
 
@@ -230,6 +215,9 @@ MIT License - feel free to use GACP in your projects!
 **yassine@numerimondes.com**
 **❤️ Made with love by numerimondes**
 
+
 ---
+
+**GACP** - Because `git add . && git commit -m "update" && git push` is too long to type every time.
 
 *Save time, commit better, code happier with GACP !*
