@@ -1,8 +1,8 @@
 #!/bin/bash
-GACP_VERSION="0.0.14"
+GACP_VERSION="0.0.1"
 
 # Constants
-readonly GACP_REPO_URL="https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gacp.sh"
+readonly GACP_REPO_URL="https://raw.githubusercontent.com/numerimondes/gacp/main/gacp.sh"
 readonly GACP_INSTALL_DIR="$HOME/.gacp"
 readonly GACP_SCRIPT_PATH="$GACP_INSTALL_DIR/gacp.sh"
 
