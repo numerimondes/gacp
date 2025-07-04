@@ -1,5 +1,5 @@
 #!/bin/bash
-GACP_VERSION="0.0.5"
+GACP_VERSION="0.0.6"
 
 # Constants
 readonly GACP_REPO_URL="https://raw.githubusercontent.com/numerimondes/gacp/main/gacp.sh"
@@ -15,32 +15,30 @@ readonly CYAN='\033[0;36m'
 readonly NC='\033[0m'
 
 log_error() {
-    echo -e "${RED}error:${NC} $1" >&2
+    echo -e "${RED}[gacp -> error]${NC} $1" >&2
 }
 
 log_success() {
-    echo -e "${GREEN}success:${NC} $1"
+    echo -e "${GREEN}[gacp -> success]${NC} $1"
 }
 
 log_info() {
-    echo -e "${BLUE}info:${NC} $1"
+    echo -e "${BLUE}[gacp -> info]${NC} $1"
 }
 
 show_help() {
-    echo "gacp v$GACP_VERSION - Git Add Commit Push"
-    echo "A one-word command from Heaven for your terminal that saves you time"
+    echo -e "${CYAN}gacp v$GACP_VERSION - Git Add Commit Push${NC}"
+    echo -e "${CYAN}A one-word command from Heaven for your terminal that saves you time${NC}"
     echo ""
-    echo "Installation:"
-    # Dynamic command generation with cache-busting
-    local timestamp=$(date +%s)
-    echo "  ${GREEN}curl -sL https://raw.githubusercontent.com/numerimondes/gacp/main/gacp.sh -o gacp.sh && chmod +x gacp.sh && ./gacp.sh --install-now${NC}"
+    echo -e "${YELLOW}Installation:${NC}"
+    echo -e "  ${GREEN}curl -sL https://raw.githubusercontent.com/numerimondes/gacp/main/gacp.sh -o gacp.sh && chmod +x gacp.sh && ./gacp.sh --install-now${NC}"
     echo ""
-    echo "${YELLOW}Usage: gacp [OPTION]${NC}"
+    echo -e "${YELLOW}Usage: gacp [OPTION]${NC}"
     echo ""
-    echo "${GREEN}Options:${NC}"
-    echo "${GREEN}  -h, --help         Show this help message${NC}"
-    echo "${GREEN}  -v, --version      Show version and check for updates${NC}"
-    echo "${GREEN}  --update-now       Update gacp to the latest version${NC}"
+    echo -e "${YELLOW}Options:${NC}"
+    echo -e "${GREEN}  -h, --help         ${NC}Show this help message"
+    echo -e "${GREEN}  -v, --version      ${NC}Show version and check for updates"
+    echo -e "${GREEN}  --update-now       ${NC}Update gacp to the latest version"
     echo ""
 }
 
@@ -173,13 +171,13 @@ update_gacp() {
     fi
     
     log_success "Updated to v$new_version"
-    echo -e "${YELLOW}warning:${NC} This shell is still running v$GACP_VERSION"
+        echo -e "${YELLOW}[gacp -> warning]${NC} This shell is still running v$GACP_VERSION"
     echo -n "Restart shell now? (Y/n): "
     read -r response
     if [[ "$response" =~ ^[Nn]$ ]]; then
-        echo -e "${BLUE}info:${NC} Run 'exec \$SHELL' when ready"
+        echo -e "${BLUE}[gacp -> info]${NC} Run 'exec \$SHELL' when ready"
     else
-        echo -e "${BLUE}info:${NC} Restarting shell..."
+        echo -e "${BLUE}[gacp -> info]${NC} Restarting shell..."
         exec $SHELL
     fi
     
@@ -224,9 +222,9 @@ install_gacp() {
     echo -n "Restart shell now? (Y/n): "
     read -r response
     if [[ "$response" =~ ^[Nn]$ ]]; then
-        echo -e "${BLUE}info:${NC} Run 'exec \$SHELL' when ready"
+        echo -e "${BLUE}[gacp -> info]${NC} Run 'exec \$SHELL' when ready"
     else
-        echo -e "${BLUE}info:${NC} Restarting shell..."
+        echo -e "${BLUE}[gacp -> info]${NC} Restarting shell..."
         exec $SHELL
     fi
 }
