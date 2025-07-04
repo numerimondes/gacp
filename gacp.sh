@@ -1,5 +1,5 @@
 #!/bin/bash
-GACP_VERSION="0.0.5"
+GACP_VERSION="0.0.6"
 
 # Constants
 readonly GACP_REPO_URL="https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gacp.sh"
@@ -12,35 +12,38 @@ readonly GREEN='\033[0;32m'
 readonly YELLOW='\033[1;33m'
 readonly BLUE='\033[0;34m'
 readonly CYAN='\033[0;36m'
-readonly MAGENTA='\033[0;35m'
-readonly WHITE='\033[1;37m'
-readonly GRAY='\033[0;37m'
 readonly NC='\033[0m'
 
-# Message prefix constants
-readonly ERROR_PREFIX="${RED}[gacp] Error:${NC}"
-readonly WARNING_PREFIX="${YELLOW}[gacp] Warning:${NC}"
-readonly SUCCESS_PREFIX="${GREEN}[gacp] Success:${NC}"
-readonly INFO_PREFIX="${BLUE}[gacp] Info:${NC}"
-
 log_error() {
-    echo -e "${ERROR_PREFIX} $1" >&2
-}
-
-log_warning() {
-    echo -e "${WARNING_PREFIX} $1" >&2
+    echo -e "${RED}[gacp] Error:${NC} $1" >&2
 }
 
 log_success() {
-    echo -e "${SUCCESS_PREFIX} $1"
+    echo -e "${GREEN}[gacp] Success:${NC} $1"
 }
 
 log_info() {
-    echo -e "${INFO_PREFIX} $1"
+    echo -e "${BLUE}[gacp] Info:${NC} $1"
 }
 
-show_credits() {
-    echo -e "${MAGENTA}[gacp] ❤️ Made with love by numerimondes${NC}"
+show_help() {
+    echo -e "${CYAN}GACP v$GACP_VERSION - Git Add Commit Push${NC}"
+    echo -e "A simple wrapper that leverages git hooks for intelligent commits"
+    echo ""
+    echo -e "${YELLOW}Usage:${NC} gacp [OPTION]"
+    echo ""
+    echo -e "Options:"
+    echo -e "  ${GREEN}-h, --help${NC}      Show this help message"
+    echo -e "  ${GREEN}-v, --version${NC}   Show version and check for updates"
+    echo -e "  ${GREEN}--update-now${NC}    Update gacp to the latest version"
+    echo -e "  ${GREEN}--install-now${NC}   Install gacp globally"
+    echo ""
+    echo -e "Examples:"
+    echo -e "  ${BLUE}gacp${NC}            # Add all changes and commit with intelligent message"
+    echo -e "  ${BLUE}gacp -v${NC}         # Show version and check for updates"
+    echo ""
+    echo -e "Installation:"
+    echo -e "  ${BLUE}curl -sL https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gacp.sh | bash -s -- --install-now${NC}"
 }
 
 get_remote_version() {
@@ -58,7 +61,7 @@ check_for_updates() {
     remote_version=$(get_remote_version)
     
     if [[ -z "$remote_version" ]]; then
-        log_warning "Could not check for updates"
+        log_info "Could not check for updates"
         return 1
     fi
     
@@ -76,25 +79,6 @@ check_for_updates() {
     fi
 }
 
-unset_gacp_functions() {
-    local functions_to_unset=(
-        "gacp" "is_conventional_commit" "log_error" "log_warning" "log_success" "log_info"
-        "generate_intelligent_message" "determine_commit_type" "show_file_changes"
-        "get_namespace_from_composer" "extract_class_name" "analyze_file_content"
-        "commit_individual_files" "show_help" "check_for_updates" "update_gacp"
-        "install_gacp" "get_remote_version" "version_gt" "unset_gacp_functions"
-        "show_credits" "detect_project_structure" "get_psr4_namespace" "show_not_git_help"
-    )
-    
-    for func in "${functions_to_unset[@]}"; do
-        unset -f "$func" 2>/dev/null || true
-    done
-    
-    unset GACP_REPO_URL GACP_INSTALL_DIR GACP_SCRIPT_PATH 2>/dev/null || true
-    unset RED GREEN YELLOW BLUE CYAN MAGENTA WHITE GRAY NC 2>/dev/null || true
-    unset ERROR_PREFIX WARNING_PREFIX SUCCESS_PREFIX INFO_PREFIX 2>/dev/null || true
-}
-
 update_gacp() {
     log_info "Updating gacp..."
     
@@ -103,15 +87,6 @@ update_gacp() {
     
     if ! curl -s "$GACP_REPO_URL" -o "$temp_file"; then
         log_error "Failed to download update"
-        rm -f "$temp_file"
-        return 1
-    fi
-    
-    local remote_version
-    remote_version=$(head -n 5 "$temp_file" | grep -E "^GACP_VERSION=" | cut -d'"' -f2)
-    
-    if [[ -z "$remote_version" ]]; then
-        log_error "Invalid remote version"
         rm -f "$temp_file"
         return 1
     fi
@@ -128,18 +103,172 @@ update_gacp() {
         return 1
     fi
     
-    if ! chmod +x "$GACP_SCRIPT_PATH"; then
-        log_error "Failed to make script executable"
-        rm -f "$temp_file"
+    chmod +x "$GACP_SCRIPT_PATH"
+    
+    # Reload the updated script
+    source "$GACP_SCRIPT_PATH"
+    
+    log_success "Updated to latest version"
+    rm -f "$temp_file"
+}
+
+install_commit_hook() {
+    local git_dir
+    git_dir=$(git rev-parse --git-dir 2>/dev/null)
+    
+    if [[ -z "$git_dir" ]]; then
+        log_error "Not in a git repository"
         return 1
     fi
     
-    # Rechargement automatique du script mis à jour
-    unset_gacp_functions
-    source "$GACP_SCRIPT_PATH"
+    local hooks_dir="$git_dir/hooks"
+    local hook_file="$hooks_dir/prepare-commit-msg"
     
-    log_success "Updated to version $remote_version"
-    rm -f "$temp_file"
+    mkdir -p "$hooks_dir"
+    
+    cat > "$hook_file" << 'EOF'
+#!/bin/bash
+# GACP intelligent commit message hook
+
+COMMIT_MSG_FILE="$1"
+COMMIT_SOURCE="$2"
+
+# Only generate message for regular commits (not merges, squashes, etc.)
+if [[ "$COMMIT_SOURCE" == "message" ]] || [[ -n "$COMMIT_SOURCE" ]]; then
+    exit 0
+fi
+
+# Get staged files
+staged_files=$(git diff --cached --name-only)
+if [[ -z "$staged_files" ]]; then
+    exit 0
+fi
+
+# Detect project type
+detect_project_type() {
+    if [[ -f "composer.json" ]]; then echo "php"
+    elif [[ -f "package.json" ]]; then echo "node"
+    elif [[ -f "requirements.txt" || -f "setup.py" || -f "pyproject.toml" ]]; then echo "python"
+    elif [[ -f "Cargo.toml" ]]; then echo "rust"
+    elif [[ -f "go.mod" ]]; then echo "go"
+    else echo "generic"
+    fi
+}
+
+# Generate commit type and message
+generate_commit_message() {
+    local files="$1"
+    local project_type="$2"
+    local file_count=$(echo "$files" | wc -l)
+    
+    local commit_type="chore"
+    local message=""
+    
+    # Determine commit type
+    if echo "$files" | grep -qE "(test|spec|Test\.)" || \
+       git diff --cached | grep -qE "^\+.*(test|spec|describe|it\(|expect)"; then
+        commit_type="test"
+    elif echo "$files" | grep -qE "\.(md|txt|rst)$|readme|doc"; then
+        commit_type="docs"
+    elif echo "$files" | grep -qE "\.github/|\.gitlab-ci|docker|ci\.yml"; then
+        commit_type="ci"
+    elif echo "$files" | grep -qE "composer\.(json|lock)|package\.(json|lock)|webpack|vite"; then
+        commit_type="build"
+    elif git diff --cached | grep -qE "^\+.*(fix|bug|error|issue)"; then
+        commit_type="fix"
+    elif git diff --cached | grep -qE "^\+.*(cache|optimize|performance)"; then
+        commit_type="perf"
+    elif echo "$files" | grep -qE "\.(css|scss|sass|less)$"; then
+        commit_type="style"
+    elif [[ $file_count -eq 1 ]]; then
+        # Single file logic
+        local file="$files"
+        local filename=$(basename "$file")
+        local dirname=$(dirname "$file")
+        
+        case "$project_type" in
+            "php")
+                if echo "$file" | grep -qE "/Models?/|Model\.php$"; then
+                    local model_name=$(basename "$file" .php)
+                    if git diff --cached | grep -qE "^\+.*class\s+$model_name"; then
+                        commit_type="feat"
+                        message="add $model_name model"
+                    else
+                        commit_type="refactor"
+                        message="update $model_name model"
+                    fi
+                elif echo "$file" | grep -qE "/Controllers?/|Controller\.php$"; then
+                    local controller_name=$(basename "$file" .php | sed 's/Controller$//')
+                    commit_type="feat"
+                    message="update $controller_name controller"
+                elif echo "$file" | grep -qE "database/migrations/"; then
+                    commit_type="feat"
+                    message="add database migration"
+                elif echo "$file" | grep -qE "/Helpers?/|helpers?\.php$"; then
+                    commit_type="feat"
+                    message="update helper functions"
+                elif echo "$file" | grep -qE "routes/"; then
+                    commit_type="feat"
+                    message="update routes"
+                elif echo "$file" | grep -qE "config/"; then
+                    commit_type="chore"
+                    message="update configuration"
+                else
+                    commit_type="refactor"
+                    message="update $filename"
+                fi
+                ;;
+            "node")
+                if echo "$file" | grep -qE "\.(js|ts|jsx|tsx)$"; then
+                    local component_name=$(basename "$file" | sed 's/\.[^.]*$//')
+                    commit_type="feat"
+                    message="update $component_name component"
+                elif echo "$file" | grep -qE "package\.json"; then
+                    commit_type="build"
+                    message="update dependencies"
+                else
+                    commit_type="refactor"
+                    message="update $filename"
+                fi
+                ;;
+            *)
+                commit_type="refactor"
+                message="update $filename"
+                ;;
+        esac
+    else
+        # Multiple files
+        if [[ $file_count -gt 10 ]]; then
+            commit_type="refactor"
+            message="major codebase update"
+        else
+            commit_type="feat"
+            message="update $file_count files"
+        fi
+    fi
+    
+    # If no specific message was generated, create a generic one
+    if [[ -z "$message" ]]; then
+        if [[ $file_count -eq 1 ]]; then
+            message="update $(basename "$files")"
+        else
+            message="update $file_count files"
+        fi
+    fi
+    
+    echo "$commit_type: $message"
+}
+
+# Main logic
+project_type=$(detect_project_type)
+generated_message=$(generate_commit_message "$staged_files" "$project_type")
+
+# Replace the commit message
+echo "$generated_message" > "$COMMIT_MSG_FILE"
+EOF
+    
+    chmod +x "$hook_file"
+    log_success "Commit message hook installed"
 }
 
 install_gacp() {
@@ -150,10 +279,7 @@ install_gacp() {
     
     log_info "Installing gacp..."
     
-    if ! mkdir -p "$install_dir"; then
-        log_error "Failed to create installation directory: $install_dir"
-        return 1
-    fi
+    mkdir -p "$install_dir"
     
     # Copy or download the script
     if [[ "$0" != "$gacp_file" ]]; then
@@ -166,720 +292,31 @@ install_gacp() {
         fi
     fi
     
-    if ! chmod +x "$gacp_file"; then
-        log_error "Failed to make script executable"
-        return 1
-    fi
+    chmod +x "$gacp_file"
     
     local source_line="source $gacp_file"
-    local shell_updated=false
     
     # Update shell configuration files
-    if [[ -f "$bashrc_file" ]]; then
-        if ! grep -q "source.*gacp.sh" "$bashrc_file"; then
-            echo "$source_line" >> "$bashrc_file"
-            shell_updated=true
-            log_info "Added gacp to ~/.bashrc"
-        fi
+    if [[ -f "$bashrc_file" ]] && ! grep -q "source.*gacp.sh" "$bashrc_file"; then
+        echo "$source_line" >> "$bashrc_file"
+        log_info "Added gacp to ~/.bashrc"
     fi
     
-    if [[ -f "$zshrc_file" ]]; then
-        if ! grep -q "source.*gacp.sh" "$zshrc_file"; then
-            echo "$source_line" >> "$zshrc_file"
-            shell_updated=true
-            log_info "Added gacp to ~/.zshrc"
-        fi
+    if [[ -f "$zshrc_file" ]] && ! grep -q "source.*gacp.sh" "$zshrc_file"; then
+        echo "$source_line" >> "$zshrc_file"
+        log_info "Added gacp to ~/.zshrc"
     fi
     
-    # Toujours charger gacp dans la session courante
-    unset_gacp_functions
-    if ! source "$gacp_file"; then
-        log_error "Failed to load gacp functions"
-        return 1
-    fi
-    
-    # Verify installation
-    if ! command -v gacp >/dev/null 2>&1; then
-        log_error "Installation verification failed"
-        return 1
-    fi
+    # Load gacp in current session
+    source "$gacp_file"
     
     log_success "gacp v$GACP_VERSION installed successfully!"
-
-    if [[ -f "$HOME/.gacp/gacp.sh" ]]; then
-        source "$HOME/.gacp/gacp.sh"
-    fi
-    
-    
-    if [[ "$shell_updated" == true ]]; then
-        log_info "To use gacp in future terminal sessions, restart your terminal or run:"
-        if [[ -f "$bashrc_file" ]]; then
-            echo "  source ~/.bashrc"
-        fi
-        if [[ -f "$zshrc_file" ]]; then
-            echo "  source ~/.zshrc"
-        fi
-    fi
-    
-    log_info "You can now use gacp in this terminal session"
-    log_info "Usage: gacp [-g] [-h] [-v] [--version] [--update-now]"
-    show_credits
-}
-
-
-show_not_git_help() {
-    log_error "Not in a git repository"
-    echo ""
-    echo -e "${WHITE}To use gacp, you need to be in a git repository.${NC}"
-    echo -e "${WHITE}Here's how to get started:${NC}"
-    echo ""
-    echo -e "${YELLOW}Initialize a new git repository:${NC}"
-    echo -e "  ${BLUE}git init${NC}"
-    echo -e "  ${BLUE}git add .${NC}"
-    echo -e "  ${BLUE}gacp${NC}"
-    echo ""
-    echo -e "${YELLOW}Clone an existing repository:${NC}"
-    echo -e "  ${BLUE}git clone <repository-url>${NC}"
-    echo -e "  ${BLUE}cd <repository-name>${NC}"
-    echo -e "  ${BLUE}gacp${NC}"
-    echo ""
-    echo -e "${YELLOW}Install gacp globally:${NC}"
-    echo -e "  ${BLUE}gacp --install-now${NC}"
-    echo ""
-    show_credits
-}
-
-is_conventional_commit() {
-    local message="$1"
-    [[ "$message" =~ ^(feat|fix|docs|style|refactor|test|chore|perf|ci|build|revert)(\(.+\))?!?:\ .+ ]]
-}
-
-show_file_changes() {
-    local file="$1"
-    local additions="$2"
-    local deletions="$3"
-    local status_color=""
-    local change_indicator=""
-    
-    local git_status
-    git_status=$(git status --porcelain "$file" 2>/dev/null | cut -c1-2)
-    
-    case "$git_status" in
-        "M ")
-            status_color="${YELLOW}"
-            change_indicator="M"
-            ;;
-        "A ")
-            status_color="${GREEN}"
-            change_indicator="A"
-            ;;
-        "D ")
-            status_color="${RED}"
-            change_indicator="D"
-            ;;
-        "R ")
-            status_color="${CYAN}"
-            change_indicator="R"
-            ;;
-        "??")
-            status_color="${BLUE}"
-            change_indicator="?"
-            ;;
-        *)
-            if [[ "$additions" -gt 0 && "$deletions" -gt 0 ]]; then
-                status_color="${YELLOW}"
-                change_indicator="M"
-            elif [[ "$additions" -gt 0 ]]; then
-                status_color="${GREEN}"
-                change_indicator="A"
-            elif [[ "$deletions" -gt 0 ]]; then
-                status_color="${RED}"
-                change_indicator="D"
-            else
-                status_color="${GRAY}"
-                change_indicator="?"
-            fi
-            ;;
-    esac
-    
-    printf "  ${status_color}%s${NC} %s ${GREEN}+%d${NC} ${RED}-%d${NC}\n" \
-        "$change_indicator" "$file" "$additions" "$deletions"
-}
-
-detect_project_structure() {
-    local project_type="unknown"
-    
-    if [[ -f "composer.json" ]]; then
-        project_type="php"
-    elif [[ -f "package.json" ]]; then
-        project_type="node"
-    elif [[ -f "requirements.txt" || -f "setup.py" || -f "pyproject.toml" ]]; then
-        project_type="python"
-    elif [[ -f "Cargo.toml" ]]; then
-        project_type="rust"
-    elif [[ -f "go.mod" ]]; then
-        project_type="go"
-    elif [[ -f "pom.xml" || -f "build.gradle" ]]; then
-        project_type="java"
-    elif [[ -f "*.csproj" || -f "*.sln" ]]; then
-        project_type="csharp"
-    elif [[ -f "Makefile" ]]; then
-        project_type="c"
-    fi
-    
-    echo "$project_type"
-}
-
-get_psr4_namespace() {
-    local composer_file="composer.json"
-    if [[ -f "$composer_file" ]]; then
-        # Extract PSR-4 autoload namespaces
-        local psr4_namespaces
-        psr4_namespaces=$(grep -A 10 '"psr-4"' "$composer_file" 2>/dev/null | grep -E '"[^"]*":\s*"[^"]*"' | head -1 | cut -d'"' -f2)
-        if [[ -n "$psr4_namespaces" ]]; then
-            echo "$psr4_namespaces"
-            return
-        fi
-        
-        # Fallback to common namespace patterns
-        grep -oE '"[^"]*":\s*"[^"]*"' "$composer_file" | grep -E "(App|Src|Lib)\\\\" | head -1 | cut -d'"' -f2 | sed 's/\\\\/\//g'
-    fi
-}
-
-extract_class_name() {
-    local file="$1"
-    local namespace_prefix="$2"
-    local project_type="$3"
-    
-    case "$project_type" in
-        "php")
-            if [[ -n "$namespace_prefix" ]]; then
-                # Remove namespace prefix and convert to class name
-                local class_path
-                class_path=$(echo "$file" | sed "s|^[^/]*/||g" | sed "s|${namespace_prefix}/||g")
-                echo "$class_path" | sed 's|/|\\|g' | sed 's|\.php$||g'
-            else
-                basename "$file" .php
-            fi
-            ;;
-        *)
-            basename "$file" | sed 's/\.[^.]*$//'
-            ;;
-    esac
-}
-
-analyze_file_content() {
-    local file="$1"
-    local project_type="$2"
-    
-    if [[ ! -f "$file" ]]; then
-        echo "new_file"
-        return
-    fi
-    
-    local diff_content
-    diff_content=$(git diff --cached "$file" 2>/dev/null)
-    
-    if [[ -z "$diff_content" ]]; then
-        diff_content=$(git diff "$file" 2>/dev/null)
-    fi
-    
-    if [[ -z "$diff_content" ]]; then
-        echo "no_changes"
-        return
-    fi
-    
-    case "$project_type" in
-        "php")
-            if echo "$diff_content" | grep -qE "^\+.*class\s+|^\+.*interface\s+|^\+.*trait\s+"; then
-                echo "new_class"
-            elif echo "$diff_content" | grep -qE "^\+.*function\s+|^\+.*public function\s+|^\+.*private function\s+|^\+.*protected function\s+"; then
-                echo "new_method"
-            elif echo "$diff_content" | grep -qE "^\+.*(belongsTo|hasMany|hasOne|belongsToMany|morphTo|morphMany)"; then
-                echo "relationship"
-            elif echo "$diff_content" | grep -qE "^\+.*fillable|^\+.*guarded|^\+.*casts|^\+.*protected \$"; then
-                echo "attributes"
-            elif echo "$diff_content" | grep -qE "^\+.*rules|^\+.*validate|^\+.*Rule::"; then
-                echo "validation"
-            elif echo "$diff_content" | grep -qE "^\+.*(DB::|Query|Builder|where|join|select|insert|update|delete|create)"; then
-                echo "database"
-            elif echo "$diff_content" | grep -qE "^\+.*(fix|bug|error|exception|try|catch|throw)"; then
-                echo "fix"
-            elif echo "$diff_content" | grep -qE "^\+.*(Route::|route|middleware|auth)"; then
-                echo "routing"
-            elif echo "$diff_content" | grep -qE "^\+.*(config|env|setting|option)"; then
-                echo "config"
-            else
-                echo "update"
-            fi
-            ;;
-        "node")
-            if echo "$diff_content" | grep -qE "^\+.*export\s+.*class|^\+.*class\s+"; then
-                echo "new_class"
-            elif echo "$diff_content" | grep -qE "^\+.*function\s+|^\+.*const\s+.*=\s+.*=>|^\+.*=\s+.*function"; then
-                echo "new_function"
-            elif echo "$diff_content" | grep -qE "^\+.*import\s+|^\+.*require\s*\(|^\+.*from\s+"; then
-                echo "dependency"
-            elif echo "$diff_content" | grep -qE "^\+.*(useState|useEffect|useCallback|useMemo)"; then
-                echo "hooks"
-            elif echo "$diff_content" | grep -qE "^\+.*<.*>|^\+.*jsx|^\+.*tsx"; then
-                echo "component"
-            else
-                echo "update"
-            fi
-            ;;
-        *)
-            if echo "$diff_content" | grep -qE "^\+.*(fix|bug|error|exception)"; then
-                echo "fix"
-            elif echo "$diff_content" | grep -qE "^\+.*(test|spec|describe|it\(|expect)"; then
-                echo "test"
-            elif echo "$diff_content" | grep -qE "^\+.*(config|setting|option)"; then
-                echo "config"
-            else
-                echo "update"
-            fi
-            ;;
-    esac
-}
-
-generate_intelligent_message() {
-    local files="$1"
-    local diff_stats="$2"
-    local diff_content="$3"
-    local commit_type="$4"
-    local file_count="$5"
-    
-    local message=""
-    local additions deletions
-    additions=$(echo "$diff_stats" | awk '{sum+=$1} END {print sum+0}')
-    deletions=$(echo "$diff_stats" | awk '{sum+=$2} END {print sum+0}')
-    
-    local project_type
-    project_type=$(detect_project_structure)
-    
-    if [[ "$file_count" -eq 1 ]]; then
-        local file="$files"
-        local file_analysis
-        file_analysis=$(analyze_file_content "$file" "$project_type")
-        
-        local filename
-        filename=$(basename "$file")
-        local dirname
-        dirname=$(dirname "$file")
-        
-        case "$project_type" in
-            "php")
-                if echo "$file" | grep -qE "/Models?/|Model\.php$"; then
-                    local model_name
-                    model_name=$(basename "$file" .php)
-                    case "$file_analysis" in
-                        "new_class"|"new_file")
-                            message="add $model_name model"
-                            ;;
-                        "relationship")
-                            message="add $model_name model relationships"
-                            ;;
-                        "attributes")
-                            message="configure $model_name model attributes"
-                            ;;
-                        "validation")
-                            message="add $model_name validation rules"
-                            ;;
-                        *)
-                            message="update $model_name model"
-                            ;;
-                    esac
-                elif echo "$file" | grep -qE "/Controllers?/|Controller\.php$"; then
-                    local controller_name
-                    controller_name=$(basename "$file" .php | sed 's/Controller$//')
-                    case "$file_analysis" in
-                        "new_class"|"new_file")
-                            message="add $controller_name controller"
-                            ;;
-                        "new_method")
-                            message="implement $controller_name controller methods"
-                            ;;
-                        "validation")
-                            message="add $controller_name validation logic"
-                            ;;
-                        "database")
-                            message="add $controller_name database operations"
-                            ;;
-                        "routing")
-                            message="update $controller_name routing logic"
-                            ;;
-                        *)
-                            message="update $controller_name controller"
-                            ;;
-                    esac
-                elif echo "$file" | grep -qE "/Services?/|Service\.php$"; then
-                    local service_name
-                    service_name=$(basename "$file" .php | sed 's/Service$//')
-                    case "$file_analysis" in
-                        "new_class"|"new_file")
-                            message="add $service_name service"
-                            ;;
-                        *)
-                            message="update $service_name service logic"
-                            ;;
-                    esac
-                elif echo "$file" | grep -qE "/Repositories?/|Repository\.php$"; then
-                    local repo_name
-                    repo_name=$(basename "$file" .php | sed 's/Repository$//')
-                    case "$file_analysis" in
-                        "new_class"|"new_file")
-                            message="add $repo_name repository"
-                            ;;
-                        *)
-                            message="update $repo_name repository methods"
-                            ;;
-                    esac
-                elif echo "$file" | grep -qE "database/migrations/"; then
-                    local migration_name
-                    migration_name=$(basename "$file" .php | sed 's/^[0-9_]*//g')
-                    case "$file_analysis" in
-                        "new_file")
-                            message="add $migration_name migration"
-                            ;;
-                        *)
-                            message="update $migration_name migration"
-                            ;;
-                    esac
-                elif echo "$file" | grep -qE "/Helpers?/|helpers?\.php$"; then
-                    local helper_context
-                    if echo "$dirname" | grep -qE "/(Assets|DateTime|Discovery|Lang|Panel|Platform|Resources|Views)"; then
-                        helper_context=$(echo "$dirname" | sed 's|.*/||' | tr '[:upper:]' '[:lower:]')
-                        case "$file_analysis" in
-                            "new_file")
-                                message="add $helper_context helper functions"
-                                ;;
-                            "new_method")
-                                message="implement $helper_context helper methods"
-                                ;;
-                            *)
-                                message="update $helper_context helper functions"
-                                ;;
-                        esac
-                    else
-                        case "$file_analysis" in
-                            "new_file")
-                                message="add helper functions"
-                                ;;
-                            *)
-                                message="update helper functions"
-                                ;;
-                        esac
-                    fi
-                elif echo "$file" | grep -qE "routes/"; then
-                    case "$file_analysis" in
-                        "routing")
-                            message="add new routes"
-                            ;;
-                        *)
-                            message="update routing configuration"
-                            ;;
-                    esac
-                elif echo "$file" | grep -qE "/Console/"; then
-                    local command_name
-                    command_name=$(basename "$file" .php | sed 's/Command$//')
-                    message="update $command_name console command"
-                elif echo "$file" | grep -qE "/Middleware/"; then
-                    local middleware_name
-                    middleware_name=$(basename "$file" .php | sed 's/Middleware$//')
-                    message="update $middleware_name middleware"
-                elif echo "$file" | grep -qE "config/"; then
-                    local config_name
-                    config_name=$(basename "$file" .php)
-                    message="update $config_name configuration"
-                else
-                    case "$file_analysis" in
-                        "new_file")
-                            message="add $filename"
-                            ;;
-                        *)
-                            message="update $filename"
-                            ;;
-                    esac
-                fi
-                ;;
-            "node")
-                if echo "$file" | grep -qE "\.(js|ts|jsx|tsx)$"; then
-                    local component_name
-                    component_name=$(basename "$file" | sed 's/\.[^.]*$//')
-                    case "$file_analysis" in
-                        "new_file")
-                            message="add $component_name component"
-                            ;;
-                        "component")
-                            message="update $component_name component"
-                            ;;
-                        "hooks")
-                            message="add $component_name hooks"
-                            ;;
-                        "new_function")
-                            message="implement $component_name functions"
-                            ;;
-                        *)
-                            message="update $component_name logic"
-                            ;;
-                    esac
-                elif echo "$file" | grep -qE "package\.json"; then
-                    message="update package dependencies"
-                elif echo "$file" | grep -qE "\.config\.|webpack|vite|rollup"; then
-                    message="update build configuration"
-                else
-                    case "$file_analysis" in
-                        "new_file")
-                            message="add $filename"
-                            ;;
-                        *)
-                            message="update $filename"
-                            ;;
-                    esac
-                fi
-                ;;
-            *)
-                case "$file_analysis" in
-                    "new_file")
-                        message="add $filename"
-                        ;;
-                    "test")
-                        message="update $filename tests"
-                        ;;
-                    "config")
-                        message="update $filename configuration"
-                        ;;
-                    *)
-                        message="update $filename"
-                        ;;
-                esac
-                ;;
-        esac
-    else
-        # Multiple files logic
-        local php_files model_files controller_files migration_files helper_files
-        php_files=$(echo "$files" | grep -E "\.php$" | wc -l)
-        model_files=$(echo "$files" | grep -E "/Models?/|Model\.php$" | wc -l)
-        controller_files=$(echo "$files" | grep -E "/Controllers?/|Controller\.php$" | wc -l)
-        migration_files=$(echo "$files" | grep -E "database/migrations/" | wc -l)
-        helper_files=$(echo "$files" | grep -E "/Helpers?/|helpers?\.php$" | wc -l)
-        
-        if [[ "$helper_files" -gt 1 ]]; then
-            message="update $helper_files helper modules"
-        elif [[ "$model_files" -gt 1 ]]; then
-            message="update $model_files model classes"
-        elif [[ "$controller_files" -gt 1 ]]; then
-            message="update $controller_files controller classes"
-        elif [[ "$migration_files" -gt 1 ]]; then
-            message="add $migration_files database migrations"
-        elif [[ "$php_files" -gt 8 ]]; then
-            message="major codebase refactoring"
-        elif [[ "$file_count" -gt 10 ]]; then
-            message="massive codebase update"
-        else
-            message="update $file_count files"
-        fi
-    fi
-    
-    echo "$message"
-}
-
-determine_commit_type() {
-    local files="$1"
-    local diff_stats="$2"
-    local diff_content="$3"
-    local type="chore"
-    
-    local additions deletions
-    additions=$(echo "$diff_stats" | awk '{sum+=$1} END {print sum+0}')
-    deletions=$(echo "$diff_stats" | awk '{sum+=$2} END {print sum+0}')
-    
-    # Fix detection takes priority
-    if echo "$files" | grep -qiE "(fix|bug|patch|hotfix)" || \
-       echo "$diff_content" | grep -qiE "^\+.*(fix|bug|error|issue|exception|throw|catch)"; then
-        type="fix"
-    # Test files
-    elif echo "$files" | grep -qiE "(test|spec|Test\.php|\.test\.|\.spec\.)" || \
-         echo "$files" | grep -qE "tests/|Tests/|__tests__/|spec/" || \
-         echo "$diff_content" | grep -qE "^\+.*(test|spec|describe|it\(|expect|assert)"; then
-        type="test"
-    # Documentation
-    elif echo "$files" | grep -qiE "\.(md|txt|rst)$|readme|doc|changelog"; then
-        type="docs"
-    # CI/CD
-    elif echo "$files" | grep -qiE "\.github/|\.gitlab-ci|jenkins|docker|Docker|\.ci/|ci\.yml|pipeline"; then
-        type="ci"
-    # Build files
-    elif echo "$files" | grep -qE "composer\.(json|lock)|package\.(json|lock)|webpack\.mix\.js|vite\.config\.js|gulpfile|gruntfile|rollup\.config|tsconfig\.json"; then
-        type="build"
-    # Performance
-    elif echo "$diff_content" | grep -qiE "^\+.*(cache|optimize|performance|speed|query|perf)"; then
-        type="perf"
-    # Styling
-    elif echo "$files" | grep -qE "\.(css|scss|sass|less|styl)$"; then
-        type="style"
-    # Configuration
-    elif echo "$files" | grep -qE "config/|Config/|\.env|\.env\.|settings"; then
-        type="chore"
-    # Feature detection for specific patterns
-    elif echo "$files" | grep -qE "/Models?/|Model\.php$|models?/" || \
-         echo "$files" | grep -qE "/Controllers?/|Controller\.php$|controllers?/" || \
-         echo "$files" | grep -qE "/Services?/|Service\.php$|services?/" || \
-         echo "$files" | grep -qE "/Helpers?/|helpers?\.php$" || \
-         echo "$files" | grep -qE "database/migrations/|migrations/" || \
-         echo "$files" | grep -qE "routes/|Routes/"; then
-        if [[ "$additions" -gt $((deletions * 2)) ]]; then
-            type="feat"
-        elif [[ "$deletions" -gt $((additions * 2)) ]]; then
-            type="refactor"
-        else
-            type="refactor"
-        fi
-    # Frontend files
-    elif echo "$files" | grep -qE "\.(js|ts|vue|jsx|tsx|svelte)$"; then
-        if [[ "$additions" -gt $((deletions * 2)) ]]; then
-            type="feat"
-        else
-            type="refactor"
-        fi
-    # PHP files (general)
-    elif echo "$files" | grep -qE "\.php$"; then
-        if [[ "$additions" -gt $((deletions * 2)) ]]; then
-            type="feat"
-        else
-            type="refactor"
-        fi
-    fi
-    
-    echo "$type"
-}
-
-commit_individual_files() {
-    local files="$1"
-    local project_type
-    project_type=$(detect_project_structure)
-    
-    local temp_files
-    temp_files=$(mktemp)
-    echo "$files" > "$temp_files"
-    
-    while IFS= read -r file; do
-        [[ -z "$file" ]] && continue
-        
-        # Reset staging area before processing each file
-        if ! git reset HEAD >/dev/null 2>&1; then
-            log_error "Failed to reset staging area"
-            continue
-        fi
-        
-        # Check if file exists in working directory or is staged for deletion
-        local git_file_status
-        git_file_status=$(git status --porcelain "$file" 2>/dev/null)
-        
-        if [[ -z "$git_file_status" ]]; then
-            continue
-        fi
-        
-        # Stage the specific file
-        if ! git add "$file" 2>/dev/null; then
-            log_error "Failed to stage $file"
-            continue
-        fi
-        
-        # Get diff stats and content for this specific file
-        local file_diff_stats file_diff_content
-        file_diff_stats=$(git diff --cached --numstat "$file" 2>/dev/null)
-        file_diff_content=$(git diff --cached "$file" 2>/dev/null)
-        
-        # Skip if no changes to commit
-        if [[ -z "$file_diff_stats" && -z "$file_diff_content" ]]; then
-            continue
-        fi
-        
-        # Parse additions and deletions
-        local additions deletions
-        additions=$(echo "$file_diff_stats" | awk '{print $1}' | head -1)
-        deletions=$(echo "$file_diff_stats" | awk '{print $2}' | head -1)
-        
-        [[ "$additions" =~ ^[0-9]+$ ]] || additions=0
-        [[ "$deletions" =~ ^[0-9]+$ ]] || deletions=0
-        
-        # Generate commit type and message
-        local file_type file_message
-        file_type=$(determine_commit_type "$file" "$file_diff_stats" "$file_diff_content")
-        file_message=$(generate_intelligent_message "$file" "$file_diff_stats" "$file_diff_content" "$file_type" "1")
-        
-        local suggested_commit="${file_type}: ${file_message}"
-        
-        # Show file information
-        echo ""
-        echo -e "${WHITE}File:${NC} $file"
-        show_file_changes "$file" "$additions" "$deletions"
-        echo ""
-        echo -e "${MAGENTA}Generated commit:${NC} $suggested_commit"
-        echo -n "Press Enter to accept, or type custom message: "
-        read -r user_input
-        
-        # Determine final commit message
-        local final_message
-        if [[ -z "$user_input" ]]; then
-            final_message="$suggested_commit"
-        elif is_conventional_commit "$user_input"; then
-            final_message="$user_input"
-        else
-            final_message="${file_type}: ${user_input}"
-        fi
-        
-        # Commit the staged changes
-        if git commit -m "$final_message"; then
-            log_success "Committed: $final_message"
-        else
-            log_error "Failed to commit $file"
-        fi
-    done < "$temp_files"
-    
-    rm -f "$temp_files"
-}
-
-show_help() {
-    echo -e "${CYAN}GACP v$GACP_VERSION - Git Add Commit Push${NC}"
-    echo -e "${WHITE}A one-word command from Heaven for your terminal that saves you time${NC}"
-    echo ""
-    echo -e "${YELLOW}Usage:${NC} gacp [OPTION]"
-    echo ""
-    echo -e "${WHITE}Options:${NC}"
-    echo -e "  ${GREEN}-g${NC}              Group all changes into a single commit (default: individual commits)"
-    echo -e "  ${GREEN}-h${NC}              Show this help message"
-    echo -e "  ${GREEN}-v, --version${NC}   Show version and check for updates"
-    echo -e "  ${GREEN}--update-now${NC}    Update gacp to the latest version"
-    echo -e "  ${GREEN}--install-now${NC}   Install gacp globally"
-    echo ""
-    echo -e "${WHITE}Examples:${NC}"
-    echo -e "  ${BLUE}gacp${NC}            # Commit files individually (default)"
-    echo -e "  ${BLUE}gacp -g${NC}         # Group all changes into one commit"
-    echo -e "  ${BLUE}gacp -v${NC}         # Show version and check for updates"
-    echo -e "  ${BLUE}gacp --update-now${NC} # Update to latest version"
-    echo ""
-    echo -e "${WHITE}Installation:${NC}"
-    echo -e "  ${BLUE}curl -sL https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gacp.sh | bash -s -- --install-now${NC}"
-    echo ""
-    echo -e "${WHITE}Features:${NC}"
-    echo -e "  ${GREEN}${NC} Intelligent commit message generation"
-    echo -e "  ${GREEN}${NC} Conventional commits support"
-    echo -e "  ${GREEN}${NC} Laravel/PHP project awareness"
-    echo -e "  ${GREEN}${NC} Individual file commits by default"
-    echo -e "  ${GREEN}${NC} Automatic upstream branch setup"
-    echo -e "  ${GREEN}${NC} Auto-update functionality"
+    log_info "Usage: gacp [-h] [-v] [--version] [--update-now]"
 }
 
 gacp() {
-    local grouped=false
     while [[ $# -gt 0 ]]; do
         case $1 in
-            -g)
-                grouped=true
-                shift
-                ;;
             -h|--help)
                 show_help
                 return 0
@@ -905,116 +342,53 @@ gacp() {
         esac
     done
     
+    # Check if we're in a git repository
     if ! git rev-parse --git-dir >/dev/null 2>&1; then
-        show_not_git_help
+        log_error "Not in a git repository"
+        echo "Initialize a git repository first: git init"
         return 1
     fi
     
-    echo -e "${BLUE}[gacp] Current git status:${NC}"
-    git status --porcelain
+    # Install commit hook if not present
+    local git_dir=$(git rev-parse --git-dir)
+    if [[ ! -f "$git_dir/hooks/prepare-commit-msg" ]]; then
+        install_commit_hook
+    fi
     
     # Check if there are any changes
-    local has_changes=false
-    if git diff --quiet && git diff --cached --quiet; then
-        if [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
-            has_changes=true
-        fi
-    else
-        has_changes=true
-    fi
-    
-    # Add all changes
-    if [[ "$has_changes" == true ]]; then
-        if ! git add -A 2>/dev/null; then
-            log_error "Failed to add files"
-            return 1
-        fi
-    fi
-    
-    # Get list of files to commit
-    local files
-    files=$(git diff --cached --name-only 2>/dev/null)
-    if [[ -z "$files" ]]; then
+    if git diff --quiet && git diff --cached --quiet && [[ -z "$(git ls-files --others --exclude-standard)" ]]; then
         log_info "No changes to commit"
         return 0
     fi
     
-    local diff_stats diff_content
-    diff_stats=$(git diff --cached --numstat 2>/dev/null)
-    diff_content=$(git diff --cached 2>/dev/null)
+    # Add all changes
+    git add -A
     
-    local file_count
-    file_count=$(echo "$files" | wc -l | sed 's/^[[:space:]]*//')
+    # Show status
+    echo -e "${BLUE}[gacp] Status:${NC}"
+    git status --short
     
+    # Commit with hook-generated message
     echo ""
-    echo -e "${WHITE}Files to be committed (${file_count}):${NC}"
-    while IFS=$'\t' read -r additions deletions filename; do
-        [[ -z "$filename" ]] && continue
-        [[ "$additions" =~ ^[0-9]+$ ]] || additions=0
-        [[ "$deletions" =~ ^[0-9]+$ ]] || deletions=0
-        show_file_changes "$filename" "$additions" "$deletions"
-    done <<< "$diff_stats"
+    log_info "Committing with intelligent message..."
+    git commit
     
-    if [[ "$grouped" == true ]]; then
-        # Group commit logic
-        local auto_prefix
-        auto_prefix=$(determine_commit_type "$files" "$diff_stats" "$diff_content")
-        local intelligent_message
-        intelligent_message=$(generate_intelligent_message "$files" "$diff_stats" "$diff_content" "$auto_prefix" "$file_count")
-        
-        echo ""
-        echo -e "${MAGENTA}Suggested commit:${NC} ${auto_prefix}: ${intelligent_message}"
-        echo -n "Press Enter to use suggested message, or type custom message: "
-        read -r user_input
-        
-        local final_message
-        if [[ -z "$user_input" ]]; then
-            final_message="${auto_prefix}: ${intelligent_message}"
-        elif is_conventional_commit "$user_input"; then
-            final_message="$user_input"
-        else
-            final_message="${auto_prefix}: ${user_input}"
-        fi
-        
-        if ! git commit -m "$final_message"; then
-            log_error "Failed to commit changes"
-            return 1
-        fi
-        log_success "Committed: $final_message"
-    else
-        # Individual commits - this is the default behavior
-        commit_individual_files "$files"
-    fi
-    
-    # Push changes to remote
-    if ! git remote >/dev/null 2>&1; then
-        log_warning "No remote repository configured"
-        return 0
-    fi
-    
-    local current_branch
-    current_branch=$(git branch --show-current 2>/dev/null)
-    if [[ -z "$current_branch" ]]; then
-        log_warning "Could not determine current branch"
-        return 0
-    fi
-    
-    # Check if upstream is set, if not set it
-    if ! git rev-parse --abbrev-ref --symbolic-full-name @{u} >/dev/null 2>&1; then
-        log_info "Setting upstream for branch: $current_branch"
-        if ! git push -u origin "$current_branch"; then
-            log_error "Failed to push and set upstream"
-            return 1
+    # Push if remote exists
+    if git remote >/dev/null 2>&1; then
+        local current_branch=$(git branch --show-current)
+        if [[ -n "$current_branch" ]]; then
+            # Check if upstream is set
+            if ! git rev-parse --abbrev-ref --symbolic-full-name @{u} >/dev/null 2>&1; then
+                log_info "Setting upstream for branch: $current_branch"
+                git push -u origin "$current_branch"
+            else
+                git push
+            fi
+            log_success "Changes pushed to remote repository"
         fi
     else
-        # Push all commits
-        if ! git push; then
-            log_error "Failed to push changes"
-            return 1
-        fi
+        log_info "No remote repository configured"
     fi
-    
-    log_success "Changes pushed to remote repository"
 }
 
 # Main execution logic
@@ -1024,26 +398,8 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             install_gacp
             exit 0
             ;;
-        -h|--help)
-            show_help
-            exit 0
-            ;;
-        -v|--version)
-            echo "gacp v$GACP_VERSION"
-            check_for_updates
-            exit 0
-            ;;
-        --update-now)
-            update_gacp
-            exit 0
-            ;;
         *)
-            if git rev-parse --git-dir >/dev/null 2>&1; then
-                gacp "$@"
-            else
-                show_not_git_help
-                exit 1
-            fi
+            gacp "$@"
             ;;
     esac
 fi
