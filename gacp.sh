@@ -1,5 +1,5 @@
 #!/bin/bash
-GACP_VERSION="0.0.6"
+GACP_VERSION="0.0.7"
 
 # Constants
 readonly GACP_REPO_URL="https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gacp.sh"
@@ -28,22 +28,33 @@ log_info() {
 
 show_help() {
     echo -e "${CYAN}GACP v$GACP_VERSION - Git Add Commit Push${NC}"
-    echo -e "A simple wrapper that leverages git hooks for intelligent commits"
+    echo -e "A one-word command from Heaven for your terminal that saves you time"
+    echo -e "Add, commit, and push all in one go with intelligent commit messages"
+    echo ""
+    echo -e "${YELLOW}Installation:${NC}"
+    echo -e "  ${BLUE}curl -sL https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gacp.sh -o gacp.sh && chmod +x gacp.sh && ./gacp.sh --install-now${NC}"
     echo ""
     echo -e "${YELLOW}Usage:${NC} gacp [OPTION]"
     echo ""
-    echo -e "Options:"
+    echo -e "${YELLOW}Options:${NC}"
     echo -e "  ${GREEN}-h, --help${NC}      Show this help message"
     echo -e "  ${GREEN}-v, --version${NC}   Show version and check for updates"
     echo -e "  ${GREEN}--update-now${NC}    Update gacp to the latest version"
     echo -e "  ${GREEN}--install-now${NC}   Install gacp globally"
     echo ""
-    echo -e "Examples:"
+    echo -e "${YELLOW}Examples:${NC}"
     echo -e "  ${BLUE}gacp${NC}            # Add all changes and commit with intelligent message"
     echo -e "  ${BLUE}gacp -v${NC}         # Show version and check for updates"
+    echo -e "  ${BLUE}gacp --update-now${NC} # Update to latest version"
     echo ""
-    echo -e "Installation:"
-    echo -e "  ${BLUE}curl -sL https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gacp.sh | bash -s -- --install-now${NC}"
+    echo -e "${YELLOW}Features:${NC}"
+    echo -e "  • Intelligent Commit Messages: Automatically generates meaningful commit messages"
+    echo -e "  • Conventional Commits: Supports and enforces conventional commit standards"
+    echo -e "  • Project Awareness: Smart detection for Laravel/PHP, Node.js, Python, and other project types"
+    echo -e "  • Individual File Commits: Commits files individually by default for better history tracking"
+    echo -e "  • Automatic Branch Setup: Handles upstream branch configuration automatically"
+    echo -e "  • Auto-Update: Built-in update mechanism to keep GACP current"
+    echo -e "  • Colorized Output: Beautiful, informative terminal output with color coding"
 }
 
 get_remote_version() {
@@ -104,171 +115,10 @@ update_gacp() {
     fi
     
     chmod +x "$GACP_SCRIPT_PATH"
-    
-    # Reload the updated script
     source "$GACP_SCRIPT_PATH"
     
     log_success "Updated to latest version"
     rm -f "$temp_file"
-}
-
-install_commit_hook() {
-    local git_dir
-    git_dir=$(git rev-parse --git-dir 2>/dev/null)
-    
-    if [[ -z "$git_dir" ]]; then
-        log_error "Not in a git repository"
-        return 1
-    fi
-    
-    local hooks_dir="$git_dir/hooks"
-    local hook_file="$hooks_dir/prepare-commit-msg"
-    
-    mkdir -p "$hooks_dir"
-    
-    cat > "$hook_file" << 'EOF'
-#!/bin/bash
-# GACP intelligent commit message hook
-
-COMMIT_MSG_FILE="$1"
-COMMIT_SOURCE="$2"
-
-# Only generate message for regular commits (not merges, squashes, etc.)
-if [[ "$COMMIT_SOURCE" == "message" ]] || [[ -n "$COMMIT_SOURCE" ]]; then
-    exit 0
-fi
-
-# Get staged files
-staged_files=$(git diff --cached --name-only)
-if [[ -z "$staged_files" ]]; then
-    exit 0
-fi
-
-# Detect project type
-detect_project_type() {
-    if [[ -f "composer.json" ]]; then echo "php"
-    elif [[ -f "package.json" ]]; then echo "node"
-    elif [[ -f "requirements.txt" || -f "setup.py" || -f "pyproject.toml" ]]; then echo "python"
-    elif [[ -f "Cargo.toml" ]]; then echo "rust"
-    elif [[ -f "go.mod" ]]; then echo "go"
-    else echo "generic"
-    fi
-}
-
-# Generate commit type and message
-generate_commit_message() {
-    local files="$1"
-    local project_type="$2"
-    local file_count=$(echo "$files" | wc -l)
-    
-    local commit_type="chore"
-    local message=""
-    
-    # Determine commit type
-    if echo "$files" | grep -qE "(test|spec|Test\.)" || \
-       git diff --cached | grep -qE "^\+.*(test|spec|describe|it\(|expect)"; then
-        commit_type="test"
-    elif echo "$files" | grep -qE "\.(md|txt|rst)$|readme|doc"; then
-        commit_type="docs"
-    elif echo "$files" | grep -qE "\.github/|\.gitlab-ci|docker|ci\.yml"; then
-        commit_type="ci"
-    elif echo "$files" | grep -qE "composer\.(json|lock)|package\.(json|lock)|webpack|vite"; then
-        commit_type="build"
-    elif git diff --cached | grep -qE "^\+.*(fix|bug|error|issue)"; then
-        commit_type="fix"
-    elif git diff --cached | grep -qE "^\+.*(cache|optimize|performance)"; then
-        commit_type="perf"
-    elif echo "$files" | grep -qE "\.(css|scss|sass|less)$"; then
-        commit_type="style"
-    elif [[ $file_count -eq 1 ]]; then
-        # Single file logic
-        local file="$files"
-        local filename=$(basename "$file")
-        local dirname=$(dirname "$file")
-        
-        case "$project_type" in
-            "php")
-                if echo "$file" | grep -qE "/Models?/|Model\.php$"; then
-                    local model_name=$(basename "$file" .php)
-                    if git diff --cached | grep -qE "^\+.*class\s+$model_name"; then
-                        commit_type="feat"
-                        message="add $model_name model"
-                    else
-                        commit_type="refactor"
-                        message="update $model_name model"
-                    fi
-                elif echo "$file" | grep -qE "/Controllers?/|Controller\.php$"; then
-                    local controller_name=$(basename "$file" .php | sed 's/Controller$//')
-                    commit_type="feat"
-                    message="update $controller_name controller"
-                elif echo "$file" | grep -qE "database/migrations/"; then
-                    commit_type="feat"
-                    message="add database migration"
-                elif echo "$file" | grep -qE "/Helpers?/|helpers?\.php$"; then
-                    commit_type="feat"
-                    message="update helper functions"
-                elif echo "$file" | grep -qE "routes/"; then
-                    commit_type="feat"
-                    message="update routes"
-                elif echo "$file" | grep -qE "config/"; then
-                    commit_type="chore"
-                    message="update configuration"
-                else
-                    commit_type="refactor"
-                    message="update $filename"
-                fi
-                ;;
-            "node")
-                if echo "$file" | grep -qE "\.(js|ts|jsx|tsx)$"; then
-                    local component_name=$(basename "$file" | sed 's/\.[^.]*$//')
-                    commit_type="feat"
-                    message="update $component_name component"
-                elif echo "$file" | grep -qE "package\.json"; then
-                    commit_type="build"
-                    message="update dependencies"
-                else
-                    commit_type="refactor"
-                    message="update $filename"
-                fi
-                ;;
-            *)
-                commit_type="refactor"
-                message="update $filename"
-                ;;
-        esac
-    else
-        # Multiple files
-        if [[ $file_count -gt 10 ]]; then
-            commit_type="refactor"
-            message="major codebase update"
-        else
-            commit_type="feat"
-            message="update $file_count files"
-        fi
-    fi
-    
-    # If no specific message was generated, create a generic one
-    if [[ -z "$message" ]]; then
-        if [[ $file_count -eq 1 ]]; then
-            message="update $(basename "$files")"
-        else
-            message="update $file_count files"
-        fi
-    fi
-    
-    echo "$commit_type: $message"
-}
-
-# Main logic
-project_type=$(detect_project_type)
-generated_message=$(generate_commit_message "$staged_files" "$project_type")
-
-# Replace the commit message
-echo "$generated_message" > "$COMMIT_MSG_FILE"
-EOF
-    
-    chmod +x "$hook_file"
-    log_success "Commit message hook installed"
 }
 
 install_gacp() {
@@ -281,7 +131,6 @@ install_gacp() {
     
     mkdir -p "$install_dir"
     
-    # Copy or download the script
     if [[ "$0" != "$gacp_file" ]]; then
         if ! cp "$0" "$gacp_file" 2>/dev/null; then
             log_info "Downloading gacp script..."
@@ -296,7 +145,6 @@ install_gacp() {
     
     local source_line="source $gacp_file"
     
-    # Update shell configuration files
     if [[ -f "$bashrc_file" ]] && ! grep -q "source.*gacp.sh" "$bashrc_file"; then
         echo "$source_line" >> "$bashrc_file"
         log_info "Added gacp to ~/.bashrc"
@@ -307,11 +155,44 @@ install_gacp() {
         log_info "Added gacp to ~/.zshrc"
     fi
     
-    # Load gacp in current session
     source "$gacp_file"
     
     log_success "gacp v$GACP_VERSION installed successfully!"
     log_info "Usage: gacp [-h] [-v] [--version] [--update-now]"
+}
+
+install_hook_if_needed() {
+    local git_dir=$(git rev-parse --git-dir)
+    local hook_file="$git_dir/hooks/prepare-commit-msg"
+    
+    if [[ ! -f "$hook_file" ]]; then
+        mkdir -p "$git_dir/hooks"
+        cat > "$hook_file" << 'EOF'
+#!/bin/bash
+# Simple commit message generator
+COMMIT_MSG_FILE="$1"
+COMMIT_SOURCE="$2"
+# Only generate message for regular commits
+if [[ "$COMMIT_SOURCE" == "message" ]] || [[ -n "$COMMIT_SOURCE" ]]; then
+    exit 0
+fi
+# Get staged files
+staged_files=$(git diff --cached --name-only)
+if [[ -z "$staged_files" ]]; then
+    exit 0
+fi
+# Simple message generation
+file_count=$(echo "$staged_files" | wc -l)
+if [[ $file_count -eq 1 ]]; then
+    filename=$(basename "$staged_files")
+    echo "update $filename" > "$COMMIT_MSG_FILE"
+else
+    echo "update $file_count files" > "$COMMIT_MSG_FILE"
+fi
+EOF
+        chmod +x "$hook_file"
+        log_info "Hook installed"
+    fi
 }
 
 gacp() {
@@ -345,15 +226,11 @@ gacp() {
     # Check if we're in a git repository
     if ! git rev-parse --git-dir >/dev/null 2>&1; then
         log_error "Not in a git repository"
-        echo "Initialize a git repository first: git init"
         return 1
     fi
     
-    # Install commit hook if not present
-    local git_dir=$(git rev-parse --git-dir)
-    if [[ ! -f "$git_dir/hooks/prepare-commit-msg" ]]; then
-        install_commit_hook
-    fi
+    # Install the hook if not present
+    install_hook_if_needed
     
     # Check if there are any changes
     if git diff --quiet && git diff --cached --quiet && [[ -z "$(git ls-files --others --exclude-standard)" ]]; then
@@ -364,34 +241,16 @@ gacp() {
     # Add all changes
     git add -A
     
-    # Show status
-    echo -e "${BLUE}[gacp] Status:${NC}"
-    git status --short
-    
-    # Commit with hook-generated message
-    echo ""
-    log_info "Committing with intelligent message..."
-    git commit
+    # Commit with the hook-generated message (no editor)
+    git commit --no-edit
     
     # Push if remote exists
     if git remote >/dev/null 2>&1; then
-        local current_branch=$(git branch --show-current)
-        if [[ -n "$current_branch" ]]; then
-            # Check if upstream is set
-            if ! git rev-parse --abbrev-ref --symbolic-full-name @{u} >/dev/null 2>&1; then
-                log_info "Setting upstream for branch: $current_branch"
-                git push -u origin "$current_branch"
-            else
-                git push
-            fi
-            log_success "Changes pushed to remote repository"
-        fi
-    else
-        log_info "No remote repository configured"
+        git push 2>/dev/null || git push -u origin $(git branch --show-current)
     fi
 }
 
-# Main execution logic
+# If script is run directly, execute gacp
 if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     case "$1" in
         --install-now)
