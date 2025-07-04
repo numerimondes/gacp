@@ -1,5 +1,5 @@
 #!/bin/bash
-GACP_VERSION="0.0.1"
+GACP_VERSION="0.0.2"
 
 # Constants
 readonly GACP_REPO_URL="https://raw.githubusercontent.com/numerimondes/gacp/main/gacp.sh"
@@ -15,15 +15,15 @@ readonly CYAN='\033[0;36m'
 readonly NC='\033[0m'
 
 log_error() {
-    echo -e "${RED}error:${NC} $1" >&2
+    echo -e "${RED}[gacp -> error]${NC} $1" >&2
 }
 
 log_success() {
-    echo -e "${GREEN}success:${NC} $1"
+    echo -e "${GREEN}[gacp -> success]${NC} $1"
 }
 
 log_info() {
-    echo -e "${BLUE}info:${NC} $1"
+    echo -e "${BLUE}[gacp -> info]${NC} $1"
 }
 
 show_help() {
