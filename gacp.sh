@@ -1,5 +1,5 @@
 #!/bin/bash
-GACP_VERSION="0.0.4"
+GACP_VERSION="0.0.5"
 
 # Constants
 readonly GACP_REPO_URL="https://raw.githubusercontent.com/numerimondes/gacp/main/gacp.sh"
@@ -15,44 +15,38 @@ readonly CYAN='\033[0;36m'
 readonly NC='\033[0m'
 
 log_error() {
-    echo -e "${RED}[gacp] Error:${NC} $1" >&2
+    echo -e "${RED}error:${NC} $1" >&2
 }
 
 log_success() {
-    echo -e "${GREEN}[gacp] Success:${NC} $1"
+    echo -e "${GREEN}success:${NC} $1"
 }
 
 log_info() {
-    echo -e "${BLUE}[gacp] Info:${NC} $1"
+    echo -e "${BLUE}info:${NC} $1"
 }
 
 show_help() {
+    echo "gacp v$GACP_VERSION - Git Add Commit Push"
+    echo "A one-word command from Heaven for your terminal that saves you time"
     echo ""
-    echo -e "${CYAN}GACP v$GACP_VERSION - Git Add Commit Push${NC}"
-    echo -e "A one-word command from Heaven for your terminal that saves you time"
-    echo -e "Add, commit, and push all in one go"
+    echo "Usage: gacp [OPTION]"
     echo ""
-    echo -e "${YELLOW}Installation:${NC}"
-    echo -e "  ${BLUE}curl -sL https://raw.githubusercontent.com/numerimondes/gacp/main/gacp.sh -o gacp.sh && chmod +x gacp.sh && ./gacp.sh --install-now${NC}"
-    echo ""
-    echo -e "${YELLOW}Usage:${NC} gacp [OPTION]"
-    echo ""
-    echo -e "${YELLOW}Options:${NC}"
-    echo -e "  ${GREEN}-h, --help${NC}         Show this help message"
-    echo -e "  ${GREEN}-v, --version${NC}      Show version and check for updates"
-    echo -e "  ${GREEN}--update-now${NC}       Update gacp to the latest version"
-    echo ""
-    echo -e "${YELLOW}Features:${NC}"
-    echo -e "  • Simple Git Workflow: Add, commit, push in one command"
-    echo -e "  • Automatic Branch Setup: Handles upstream branch configuration automatically"
-    echo -e "  • Auto-Update: Built-in update mechanism to keep GACP current"
-    echo -e "  • Colorized Output: Beautiful, informative terminal output with color coding"
+    echo "Options:"
+    echo "  -h, --help         Show this help message"
+    echo "  -v, --version      Show version and check for updates"
+    echo "  --update-now       Update gacp to the latest version"
     echo ""
 }
 
 get_remote_version() {
     local remote_version
-    remote_version=$(curl -s -H 'Cache-Control: no-cache' "$GACP_REPO_URL" | head -n 5 | grep -E "^GACP_VERSION=" | cut -d'"' -f2 2>/dev/null)
+    # Force fresh download with multiple cache-busting headers
+    remote_version=$(curl -s \
+        -H 'Cache-Control: no-cache, no-store, must-revalidate' \
+        -H 'Pragma: no-cache' \
+        -H 'Expires: 0' \
+        "$GACP_REPO_URL?$(date +%s)" | head -n 5 | grep -E "^GACP_VERSION=" | cut -d'"' -f2 2>/dev/null)
     echo "$remote_version"
 }
 
@@ -70,14 +64,7 @@ check_for_updates() {
     fi
     
     if version_gt "$remote_version" "$GACP_VERSION"; then
-        echo ""
-        echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-        echo -e "${CYAN}                    UPDATE AVAILABLE                       ${NC}"
-        echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-        echo -e "${YELLOW}Current version in this shell:${NC} ${RED}v$GACP_VERSION${NC}"
-        echo -e "${YELLOW}Latest version available:${NC}     ${GREEN}v$remote_version${NC}"
-        echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-        echo ""
+        echo -e "${YELLOW}Update available: v$GACP_VERSION -> v$remote_version${NC}"
         echo -n "Update now? (y/N): "
         read -r response
         if [[ "$response" =~ ^[Yy]$ ]]; then
@@ -93,21 +80,11 @@ check_for_updates() {
 update_gacp() {
     local new_version="$1"
     
-    echo ""
-    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-    echo -e "${CYAN}                    GACP UPDATE                           ${NC}"
-    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-    echo -e "${YELLOW}Current version in this shell:${NC} ${RED}v$GACP_VERSION${NC}"
-    echo -e "${YELLOW}New version available:${NC}        ${GREEN}v$new_version${NC}"
-    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-    echo ""
-    
-    log_info "Updating gacp..."
+    log_info "Updating gacp v$GACP_VERSION -> v$new_version..."
     
     # Remove old installation
     if [[ -f "$GACP_SCRIPT_PATH" ]]; then
         rm -f "$GACP_SCRIPT_PATH"
-        log_info "Removed old gacp script"
     fi
     
     # Remove from shell config files
@@ -116,19 +93,21 @@ update_gacp() {
     
     if [[ -f "$bashrc_file" ]] && grep -q "source.*gacp.sh" "$bashrc_file"; then
         sed -i '/source.*gacp\.sh/d' "$bashrc_file"
-        log_info "Removed gacp from ~/.bashrc"
     fi
     
     if [[ -f "$zshrc_file" ]] && grep -q "source.*gacp.sh" "$zshrc_file"; then
         sed -i '/source.*gacp\.sh/d' "$zshrc_file"
-        log_info "Removed gacp from ~/.zshrc"
     fi
     
-    # Fresh installation
+    # Fresh installation with cache-busting
     local temp_file
     temp_file=$(mktemp)
     
-    if ! curl -s -H 'Cache-Control: no-cache' "$GACP_REPO_URL" -o "$temp_file"; then
+    if ! curl -s \
+        -H 'Cache-Control: no-cache, no-store, must-revalidate' \
+        -H 'Pragma: no-cache' \
+        -H 'Expires: 0' \
+        "$GACP_REPO_URL?$(date +%s)" -o "$temp_file"; then
         log_error "Failed to download update"
         rm -f "$temp_file"
         return 1
@@ -153,31 +132,22 @@ update_gacp() {
     
     if [[ -f "$bashrc_file" ]]; then
         echo "$source_line" >> "$bashrc_file"
-        log_info "Added gacp to ~/.bashrc"
     fi
     
     if [[ -f "$zshrc_file" ]]; then
         echo "$source_line" >> "$zshrc_file"
-        log_info "Added gacp to ~/.zshrc"
     fi
     
-    log_success "Updated to latest version (v$new_version)"
-    echo ""
-    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-    echo -e "${YELLOW}                  IMPORTANT NOTICE ${NC}"
-    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-    echo -e "${RED}This shell is still running the old version (v$GACP_VERSION)${NC}"
-    echo -e "${GREEN}The new version (v$new_version) is now installed globally${NC}"
-    echo ""
-    echo -e "${YELLOW}To use the new version:${NC}"
-    echo -e "  ${BLUE}1. Open a new terminal tab/window (Ctrl+Shift+T)${NC}"
-    echo -e "  ${BLUE}2. Or restart your current shell with: exec \$SHELL${NC}"
-    echo -e "  ${BLUE}3. Or source your shell config: source ~/.bashrc (or ~/.zshrc)${NC}"
-    echo ""
-    echo -e "${YELLOW}To verify the update worked:${NC}"
-    echo -e "  ${BLUE}gacp -v${NC}"
-    echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-    echo ""
+    log_success "Updated to v$new_version"
+    echo -e "${YELLOW}warning:${NC} This shell is still running v$GACP_VERSION"
+    echo -n "Restart shell now? (Y/n): "
+    read -r response
+    if [[ "$response" =~ ^[Nn]$ ]]; then
+        echo -e "${BLUE}info:${NC} Run 'exec \$SHELL' when ready"
+    else
+        echo -e "${BLUE}info:${NC} Restarting shell..."
+        exec $SHELL
+    fi
     
     rm -f "$temp_file"
 }
@@ -195,7 +165,11 @@ install_gacp() {
     if [[ "$0" != "$gacp_file" ]]; then
         if ! cp "$0" "$gacp_file" 2>/dev/null; then
             log_info "Downloading gacp script..."
-            if ! curl -s -H 'Cache-Control: no-cache' "$GACP_REPO_URL" -o "$gacp_file"; then
+            if ! curl -s \
+                -H 'Cache-Control: no-cache, no-store, must-revalidate' \
+                -H 'Pragma: no-cache' \
+                -H 'Expires: 0' \
+                "$GACP_REPO_URL?$(date +%s)" -o "$gacp_file"; then
                 log_error "Failed to download gacp script"
                 return 1
             fi
@@ -208,18 +182,15 @@ install_gacp() {
     
     if [[ -f "$bashrc_file" ]] && ! grep -q "source.*gacp.sh" "$bashrc_file"; then
         echo "$source_line" >> "$bashrc_file"
-        log_info "Added gacp to ~/.bashrc"
     fi
     
     if [[ -f "$zshrc_file" ]] && ! grep -q "source.*gacp.sh" "$zshrc_file"; then
         echo "$source_line" >> "$zshrc_file"
-        log_info "Added gacp to ~/.zshrc"
     fi
     
     source "$gacp_file"
     
     log_success "gacp v$GACP_VERSION installed successfully!"
-    log_info "Usage: gacp [-h] [-v] [--version] [--update-now]"
 }
 
 gacp() {
@@ -241,7 +212,6 @@ gacp() {
                 return 0
                 ;;
             --update-now)
-                echo -e "${YELLOW}Checking for updates...${NC}"
                 gacp -v
                 return 0
                 ;;
@@ -280,7 +250,7 @@ gacp() {
         git commit
     elif [[ $changed_files -gt 1 ]]; then
         # Multiple files, ask user
-        echo -e "${YELLOW}Multiple Files Edited. Do you want to edit the commit? Y/n${NC} (default: n)"
+        echo -e "${YELLOW}Multiple files edited. Edit commit message? (y/N)${NC}"
         read -r response
         if [[ "$response" =~ ^[Yy]$ ]]; then
             git commit
