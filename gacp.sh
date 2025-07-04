@@ -1,5 +1,5 @@
 #!/bin/bash
-GACP_VERSION="0.0.7"
+GACP_VERSION="0.0.8"
 
 # Constants
 readonly GACP_REPO_URL="https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gacp.sh"
@@ -28,8 +28,8 @@ log_info() {
 
 show_help() {
     echo -e "${CYAN}GACP v$GACP_VERSION - Git Add Commit Push${NC}"
-    echo -e "A one-word command from Heaven for your terminal that saves you time"
-    echo -e "Add, commit, and push all in one go with intelligent commit messages"
+    echo -e "A simple command for your terminal that saves you time"
+    echo -e "Add, commit, and push all in one go"
     echo ""
     echo -e "${YELLOW}Installation:${NC}"
     echo -e "  ${BLUE}curl -sL https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gacp.sh -o gacp.sh && chmod +x gacp.sh && ./gacp.sh --install-now${NC}"
@@ -40,18 +40,14 @@ show_help() {
     echo -e "  ${GREEN}-h, --help${NC}      Show this help message"
     echo -e "  ${GREEN}-v, --version${NC}   Show version and check for updates"
     echo -e "  ${GREEN}--update-now${NC}    Update gacp to the latest version"
-    echo -e "  ${GREEN}--install-now${NC}   Install gacp globally"
     echo ""
     echo -e "${YELLOW}Examples:${NC}"
-    echo -e "  ${BLUE}gacp${NC}            # Add all changes and commit with intelligent message"
+    echo -e "  ${BLUE}gacp${NC}            # Add all changes and commit"
     echo -e "  ${BLUE}gacp -v${NC}         # Show version and check for updates"
     echo -e "  ${BLUE}gacp --update-now${NC} # Update to latest version"
     echo ""
     echo -e "${YELLOW}Features:${NC}"
-    echo -e "  • Intelligent Commit Messages: Automatically generates meaningful commit messages"
-    echo -e "  • Conventional Commits: Supports and enforces conventional commit standards"
-    echo -e "  • Project Awareness: Smart detection for Laravel/PHP, Node.js, Python, and other project types"
-    echo -e "  • Individual File Commits: Commits files individually by default for better history tracking"
+    echo -e "  • Simple Git Workflow: Add, commit, push in one command"
     echo -e "  • Automatic Branch Setup: Handles upstream branch configuration automatically"
     echo -e "  • Auto-Update: Built-in update mechanism to keep GACP current"
     echo -e "  • Colorized Output: Beautiful, informative terminal output with color coding"
@@ -93,6 +89,27 @@ check_for_updates() {
 update_gacp() {
     log_info "Updating gacp..."
     
+    # Remove old installation
+    if [[ -f "$GACP_SCRIPT_PATH" ]]; then
+        rm -f "$GACP_SCRIPT_PATH"
+        log_info "Removed old gacp script"
+    fi
+    
+    # Remove from shell config files
+    local bashrc_file="$HOME/.bashrc"
+    local zshrc_file="$HOME/.zshrc"
+    
+    if [[ -f "$bashrc_file" ]] && grep -q "source.*gacp.sh" "$bashrc_file"; then
+        sed -i '/source.*gacp\.sh/d' "$bashrc_file"
+        log_info "Removed gacp from ~/.bashrc"
+    fi
+    
+    if [[ -f "$zshrc_file" ]] && grep -q "source.*gacp.sh" "$zshrc_file"; then
+        sed -i '/source.*gacp\.sh/d' "$zshrc_file"
+        log_info "Removed gacp from ~/.zshrc"
+    fi
+    
+    # Fresh installation
     local temp_file
     temp_file=$(mktemp)
     
@@ -115,9 +132,24 @@ update_gacp() {
     fi
     
     chmod +x "$GACP_SCRIPT_PATH"
-    source "$GACP_SCRIPT_PATH"
+    
+    # Add to shell config files
+    local source_line="source $GACP_SCRIPT_PATH"
+    
+    if [[ -f "$bashrc_file" ]]; then
+        echo "$source_line" >> "$bashrc_file"
+        log_info "Added gacp to ~/.bashrc"
+    fi
+    
+    if [[ -f "$zshrc_file" ]]; then
+        echo "$source_line" >> "$zshrc_file"
+        log_info "Added gacp to ~/.zshrc"
+    fi
     
     log_success "Updated to latest version"
+    echo -e "${YELLOW}ATTENTION:${NC} The new version will not work in this terminal session."
+    echo -e "${BLUE}Please open a new terminal tab/window to use the updated gacp.${NC}"
+    
     rm -f "$temp_file"
 }
 
@@ -161,46 +193,18 @@ install_gacp() {
     log_info "Usage: gacp [-h] [-v] [--version] [--update-now]"
 }
 
-install_hook_if_needed() {
-    local git_dir=$(git rev-parse --git-dir)
-    local hook_file="$git_dir/hooks/prepare-commit-msg"
-    
-    if [[ ! -f "$hook_file" ]]; then
-        mkdir -p "$git_dir/hooks"
-        cat > "$hook_file" << 'EOF'
-#!/bin/bash
-# Simple commit message generator
-COMMIT_MSG_FILE="$1"
-COMMIT_SOURCE="$2"
-# Only generate message for regular commits
-if [[ "$COMMIT_SOURCE" == "message" ]] || [[ -n "$COMMIT_SOURCE" ]]; then
-    exit 0
-fi
-# Get staged files
-staged_files=$(git diff --cached --name-only)
-if [[ -z "$staged_files" ]]; then
-    exit 0
-fi
-# Simple message generation
-file_count=$(echo "$staged_files" | wc -l)
-if [[ $file_count -eq 1 ]]; then
-    filename=$(basename "$staged_files")
-    echo "update $filename" > "$COMMIT_MSG_FILE"
-else
-    echo "update $file_count files" > "$COMMIT_MSG_FILE"
-fi
-EOF
-        chmod +x "$hook_file"
-        log_info "Hook installed"
-    fi
-}
-
 gacp() {
+    local force_edit=false
+    
     while [[ $# -gt 0 ]]; do
         case $1 in
             -h|--help)
                 show_help
                 return 0
+                ;;
+            -e|--edit)
+                force_edit=true
+                shift
                 ;;
             -v|--version)
                 echo "gacp v$GACP_VERSION"
@@ -229,9 +233,6 @@ gacp() {
         return 1
     fi
     
-    # Install the hook if not present
-    install_hook_if_needed
-    
     # Check if there are any changes
     if git diff --quiet && git diff --cached --quiet && [[ -z "$(git ls-files --others --exclude-standard)" ]]; then
         log_info "No changes to commit"
@@ -241,8 +242,25 @@ gacp() {
     # Add all changes
     git add -A
     
-    # Commit with the hook-generated message (no editor)
-    git commit --no-edit
+    # Check number of files changed
+    local changed_files=$(git diff --cached --name-only | wc -l)
+    
+    if [[ $force_edit == true ]]; then
+        # Force edit mode
+        git commit
+    elif [[ $changed_files -gt 1 ]]; then
+        # Multiple files, ask user
+        echo -e "${YELLOW}Multiple Files Edited. Do you want to edit the commit? Y/n${NC} (default: n)"
+        read -r response
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            git commit
+        else
+            git commit --no-edit
+        fi
+    else
+        # Single file or default, use --no-edit
+        git commit --no-edit
+    fi
     
     # Push if remote exists
     if git remote >/dev/null 2>&1; then
