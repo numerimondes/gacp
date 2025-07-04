@@ -1,5 +1,5 @@
 #!/bin/bash
-GACP_VERSION="0.0.2"
+GACP_VERSION="0.0.3"
 
 # Constants
 readonly GACP_REPO_URL="https://raw.githubusercontent.com/numerimondes/gacp/main/gacp.sh"
@@ -52,14 +52,13 @@ show_help() {
 
 get_remote_version() {
     local remote_version
-    remote_version=$(curl -s "$GACP_REPO_URL" | head -n 5 | grep -E "^GACP_VERSION=" | cut -d'"' -f2 2>/dev/null)
+    remote_version=$(curl -s -H 'Cache-Control: no-cache' "$GACP_REPO_URL" | head -n 5 | grep -E "^GACP_VERSION=" | cut -d'"' -f2 2>/dev/null)
     echo "$remote_version"
 }
 
 version_gt() {
     test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1"
 }
-
 
 check_for_updates() {
     local remote_version
@@ -71,7 +70,14 @@ check_for_updates() {
     fi
     
     if version_gt "$remote_version" "$GACP_VERSION"; then
-        echo -e "${YELLOW}Update available: v$GACP_VERSION -> v$remote_version${NC}"
+        echo ""
+        echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+        echo -e "${CYAN}                    UPDATE AVAILABLE                       ${NC}"
+        echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+        echo -e "${YELLOW}Current version in this shell:${NC} ${RED}v$GACP_VERSION${NC}"
+        echo -e "${YELLOW}Latest version available:${NC}     ${GREEN}v$remote_version${NC}"
+        echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+        echo ""
         echo -n "Update now? (y/N): "
         read -r response
         if [[ "$response" =~ ^[Yy]$ ]]; then
@@ -122,7 +128,7 @@ update_gacp() {
     local temp_file
     temp_file=$(mktemp)
     
-    if ! curl -s "$GACP_REPO_URL" -o "$temp_file"; then
+    if ! curl -s -H 'Cache-Control: no-cache' "$GACP_REPO_URL" -o "$temp_file"; then
         log_error "Failed to download update"
         rm -f "$temp_file"
         return 1
@@ -164,7 +170,7 @@ update_gacp() {
     echo -e "${GREEN}The new version (v$new_version) is now installed globally${NC}"
     echo ""
     echo -e "${YELLOW}To use the new version:${NC}"
-    echo -e "  ${BLUE}1. Open a new terminal tab/window${NC}"
+    echo -e "  ${BLUE}1. Open a new terminal tab/window (Ctrl+Shift+T)${NC}"
     echo -e "  ${BLUE}2. Or restart your current shell with: exec \$SHELL${NC}"
     echo -e "  ${BLUE}3. Or source your shell config: source ~/.bashrc (or ~/.zshrc)${NC}"
     echo ""
@@ -189,7 +195,7 @@ install_gacp() {
     if [[ "$0" != "$gacp_file" ]]; then
         if ! cp "$0" "$gacp_file" 2>/dev/null; then
             log_info "Downloading gacp script..."
-            if ! curl -s "$GACP_REPO_URL" -o "$gacp_file"; then
+            if ! curl -s -H 'Cache-Control: no-cache' "$GACP_REPO_URL" -o "$gacp_file"; then
                 log_error "Failed to download gacp script"
                 return 1
             fi
@@ -235,13 +241,8 @@ gacp() {
                 return 0
                 ;;
             --update-now)
-                local remote_version
-                remote_version=$(get_remote_version)
-                if [[ -n "$remote_version" ]]; then
-                    update_gacp "$remote_version"
-                else
-                    log_error "Could not retrieve remote version"
-                fi
+                echo -e "${YELLOW}Checking for updates...${NC}"
+                gacp -v
                 return 0
                 ;;
             --install-now)
