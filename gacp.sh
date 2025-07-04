@@ -1,5 +1,5 @@
 #!/bin/bash
-GACP_VERSION="0.0.8"
+GACP_VERSION="0.0.9"
 
 # Constants
 readonly GACP_REPO_URL="https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gacp.sh"
@@ -27,8 +27,9 @@ log_info() {
 }
 
 show_help() {
+    echo ""
     echo -e "${CYAN}GACP v$GACP_VERSION - Git Add Commit Push${NC}"
-    echo -e "A simple command for your terminal that saves you time"
+    echo -e "A one-word command from Heaven for your terminal that saves you time"
     echo -e "Add, commit, and push all in one go"
     echo ""
     echo -e "${YELLOW}Installation:${NC}"
@@ -51,6 +52,7 @@ show_help() {
     echo -e "  • Automatic Branch Setup: Handles upstream branch configuration automatically"
     echo -e "  • Auto-Update: Built-in update mechanism to keep GACP current"
     echo -e "  • Colorized Output: Beautiful, informative terminal output with color coding"
+    echo ""
 }
 
 get_remote_version() {
