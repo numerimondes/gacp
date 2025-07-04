@@ -1,5 +1,5 @@
 #!/bin/bash
-GACP_VERSION="0.0.5"
+GACP_VERSION="0.0.6"
 
 # Constants
 readonly GACP_REPO_URL="https://raw.githubusercontent.com/numerimondes/gacp/main/gacp.sh"
@@ -29,6 +29,9 @@ log_info() {
 show_help() {
     echo "gacp v$GACP_VERSION - Git Add Commit Push"
     echo "A one-word command from Heaven for your terminal that saves you time"
+    echo ""
+    echo "Installation:"
+    echo "  curl -sL https://raw.githubusercontent.com/numerimondes/gacp/main/gacp.sh -o gacp.sh && chmod +x gacp.sh && ./gacp.sh --install-now"
     echo ""
     echo "Usage: gacp [OPTION]"
     echo ""
