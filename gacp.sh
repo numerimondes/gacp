@@ -661,12 +661,17 @@ determine_commit_type() {
     echo "$type"
 }
 
+
 commit_individual_files() {
     local files="$1"
     local project_type
     project_type=$(detect_project_structure)
     
-    echo "$files" | while IFS= read -r file; do
+    local temp_files
+    temp_files=$(mktemp)
+    echo "$files" > "$temp_files"
+    
+    while IFS= read -r file; do
         [[ -z "$file" ]] && continue
         
         if ! git reset HEAD >/dev/null 2>&1; then
@@ -674,7 +679,19 @@ commit_individual_files() {
             continue
         fi
         
-        if ! git add "$file"; then
+        local file_exists=false
+        if [[ -f "$file" ]]; then
+            file_exists=true
+        fi
+        
+        local git_file_status
+        git_file_status=$(git status --porcelain "$file" 2>/dev/null)
+        
+        if [[ -z "$git_file_status" ]]; then
+            continue
+        fi
+        
+        if ! git add "$file" 2>/dev/null; then
             log_error "Failed to stage $file"
             continue
         fi
@@ -683,9 +700,16 @@ commit_individual_files() {
         file_diff_stats=$(git diff --cached --numstat "$file" 2>/dev/null)
         file_diff_content=$(git diff --cached "$file" 2>/dev/null)
         
+        if [[ -z "$file_diff_stats" ]]; then
+            continue
+        fi
+        
         local additions deletions
         additions=$(echo "$file_diff_stats" | awk '{print $1}')
         deletions=$(echo "$file_diff_stats" | awk '{print $2}')
+        
+        [[ "$additions" =~ ^[0-9]+$ ]] || additions=0
+        [[ "$deletions" =~ ^[0-9]+$ ]] || deletions=0
         
         local file_type file_message
         file_type=$(determine_commit_type "$file" "$file_diff_stats" "$file_diff_content")
@@ -715,7 +739,9 @@ commit_individual_files() {
         else
             log_error "Failed to commit $file"
         fi
-    done
+    done < "$temp_files"
+    
+    rm -f "$temp_files"
 }
 
 show_help() {
@@ -750,7 +776,6 @@ show_help() {
 }
 
 gacp() {
-
     local grouped=false
     while [[ $# -gt 0 ]]; do
         case $1 in
@@ -791,13 +816,17 @@ gacp() {
     echo -e "${BLUE}[gacp] Current git status:${NC}"
     git status --porcelain
     
-    local modified_files deleted_files untracked_files
-    modified_files=$(git diff --name-only 2>/dev/null)
-    deleted_files=$(git diff --name-only --diff-filter=D 2>/dev/null)
-    untracked_files=$(git ls-files --others --exclude-standard 2>/dev/null)
+    local has_changes=false
+    if git diff --quiet && git diff --cached --quiet; then
+        if [[ -n "$(git ls-files --others --exclude-standard)" ]]; then
+            has_changes=true
+        fi
+    else
+        has_changes=true
+    fi
     
-    if [[ -n "$modified_files" || -n "$deleted_files" || -n "$untracked_files" ]]; then
-        if ! git add -A; then
+    if [[ "$has_changes" == true ]]; then
+        if ! git add -A 2>/dev/null; then
             log_error "Failed to add files"
             return 1
         fi
@@ -820,6 +849,9 @@ gacp() {
     echo ""
     echo -e "${WHITE}Files to be committed (${file_count}):${NC}"
     while IFS=$'\t' read -r additions deletions filename; do
+        [[ -z "$filename" ]] && continue
+        [[ "$additions" =~ ^[0-9]+$ ]] || additions=0
+        [[ "$deletions" =~ ^[0-9]+$ ]] || deletions=0
         show_file_changes "$filename" "$additions" "$deletions"
     done <<< "$diff_stats"
     
