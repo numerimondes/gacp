@@ -1,5 +1,5 @@
 #!/bin/bash
-GACP_VERSION="0.0.3"
+GACP_VERSION="0.0.4"
 
 # Constants
 readonly GACP_REPO_URL="https://raw.githubusercontent.com/numerimondes/gacp/main/gacp.sh"
