@@ -1,5 +1,5 @@
 #!/bin/bash
-GACP_VERSION="0.0.6"
+GACP_VERSION="0.0.1"
 
 # Constants
 readonly GACP_REPO_URL="https://raw.githubusercontent.com/numerimondes/gacp/main/gacp.sh"
@@ -194,6 +194,14 @@ install_gacp() {
     source "$gacp_file"
     
     log_success "gacp v$GACP_VERSION installed successfully!"
+    echo -n "Restart shell now? (Y/n): "
+    read -r response
+    if [[ "$response" =~ ^[Nn]$ ]]; then
+        echo -e "${BLUE}info:${NC} Run 'exec \$SHELL' when ready"
+    else
+        echo -e "${BLUE}info:${NC} Restarting shell..."
+        exec $SHELL
+    fi
 }
 
 gacp() {
