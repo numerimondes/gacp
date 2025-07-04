@@ -31,20 +31,20 @@ show_help() {
     echo "A one-word command from Heaven for your terminal that saves you time"
     echo ""
     echo "Installation:"
-    # Génération dynamique de la commande avec cache-busting
+    # Dynamic command generation with cache-busting
     local timestamp=$(date +%s)
     echo "  ${GREEN}curl -sL https://raw.githubusercontent.com/numerimondes/gacp/main/gacp.sh -o gacp.sh && chmod +x gacp.sh && ./gacp.sh --install-now${NC}"
     echo ""
     echo "${YELLOW}Usage: gacp [OPTION]${NC}"
     echo ""
-    echo ""${GREEN}Options:"${NC}"
-    echo ""${GREEN}  -h, --help         Show this help message${NC}"
-    echo ""${GREEN}  -v, --version      Show version and check for updates${NC}"
-    echo ""${GREEN}  --update-now       Update gacp to the latest version${NC}"
+    echo "${GREEN}Options:${NC}"
+    echo "${GREEN}  -h, --help         Show this help message${NC}"
+    echo "${GREEN}  -v, --version      Show version and check for updates${NC}"
+    echo "${GREEN}  --update-now       Update gacp to the latest version${NC}"
     echo ""
 }
 
-# Fonction pour télécharger avec cache-busting intelligent
+# Function to download with intelligent cache-busting
 download_with_cache_busting() {
     local url="$1"
     local output_file="$2"
