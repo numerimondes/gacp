@@ -33,7 +33,7 @@ show_help() {
     echo -e "Add, commit, and push all in one go"
     echo ""
     echo -e "${YELLOW}Installation:${NC}"
-    echo -e "  ${BLUE}curl -sL https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gacp.sh -o gacp.sh && chmod +x gacp.sh && ./gacp.sh --install-now${NC}"
+    echo -e "  ${BLUE}curl -sL https://raw.githubusercontent.com/numerimondes/gacp/main/gacp.sh -o gacp.sh && chmod +x gacp.sh && ./gacp.sh --install-now${NC}"
     echo ""
     echo -e "${YELLOW}Usage:${NC} gacp [OPTION]"
     echo ""
