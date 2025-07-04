@@ -1,5 +1,5 @@
 #!/bin/bash
-GACP_VERSION="0.0.9"
+GACP_VERSION="0.0.10"
 
 # Constants
 readonly GACP_REPO_URL="https://raw.githubusercontent.com/numerimondes/gacp/refs/heads/main/gacp.sh"
@@ -149,9 +149,10 @@ update_gacp() {
     fi
     
     log_success "Updated to latest version"
+    echo ""
     echo -e "${YELLOW}ATTENTION:${NC} The new version will not work in this terminal session."
     echo -e "${BLUE}Please open a new terminal tab/window to use the updated gacp.${NC}"
-    
+    echo ""    
     rm -f "$temp_file"
 }
 
