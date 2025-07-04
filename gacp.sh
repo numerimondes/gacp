@@ -15,15 +15,15 @@ readonly CYAN='\033[0;36m'
 readonly NC='\033[0m'
 
 log_error() {
-    echo -e "${RED}[gacp -> error]${NC} $1" >&2
+    echo -e "${RED}error:${NC} $1" >&2
 }
 
 log_success() {
-    echo -e "${GREEN}[gacp -> success]${NC} $1"
+    echo -e "${GREEN}success:${NC} $1"
 }
 
 log_info() {
-    echo -e "${BLUE}[gacp -> info]${NC} $1"
+    echo -e "${BLUE}info:${NC} $1"
 }
 
 show_help() {
@@ -44,12 +44,34 @@ show_help() {
 
 get_remote_version() {
     local remote_version
-    # Force fresh download with multiple cache-busting headers
-    remote_version=$(curl -s \
-        -H 'Cache-Control: no-cache, no-store, must-revalidate' \
-        -H 'Pragma: no-cache' \
-        -H 'Expires: 0' \
-        "$GACP_REPO_URL?$(date +%s)" | head -n 5 | grep -E "^GACP_VERSION=" | cut -d'"' -f2 2>/dev/null)
+    local attempts=0
+    local max_attempts=3
+    
+    while [[ $attempts -lt $max_attempts ]]; do
+        # Multiple strategies to bypass GitHub cache
+        local timestamp=$(date +%s%N)  # nanoseconds for uniqueness
+        local random=$((RANDOM % 10000))
+        
+        remote_version=$(curl -s \
+            -H 'Cache-Control: no-cache, no-store, must-revalidate' \
+            -H 'Pragma: no-cache' \
+            -H 'Expires: 0' \
+            -H 'If-None-Match: *' \
+            -H 'If-Modified-Since: Thu, 01 Jan 1970 00:00:00 GMT' \
+            -A "gacp-updater/$GACP_VERSION-$timestamp" \
+            "$GACP_REPO_URL?nocache=$timestamp&rand=$random" | \
+            head -n 10 | grep -E "^GACP_VERSION=" | cut -d'"' -f2 2>/dev/null)
+        
+        if [[ -n "$remote_version" ]]; then
+            break
+        fi
+        
+        ((attempts++))
+        if [[ $attempts -lt $max_attempts ]]; then
+            sleep 1  # Wait before retry
+        fi
+    done
+    
     echo "$remote_version"
 }
 
@@ -102,15 +124,20 @@ update_gacp() {
         sed -i '/source.*gacp\.sh/d' "$zshrc_file"
     fi
     
-    # Fresh installation with cache-busting
+    # Fresh installation with aggressive cache-busting
     local temp_file
     temp_file=$(mktemp)
+    local timestamp=$(date +%s%N)
+    local random=$((RANDOM % 10000))
     
     if ! curl -s \
         -H 'Cache-Control: no-cache, no-store, must-revalidate' \
         -H 'Pragma: no-cache' \
         -H 'Expires: 0' \
-        "$GACP_REPO_URL?$(date +%s)" -o "$temp_file"; then
+        -H 'If-None-Match: *' \
+        -H 'If-Modified-Since: Thu, 01 Jan 1970 00:00:00 GMT' \
+        -A "gacp-updater/$GACP_VERSION-$timestamp" \
+        "$GACP_REPO_URL?nocache=$timestamp&rand=$random" -o "$temp_file"; then
         log_error "Failed to download update"
         rm -f "$temp_file"
         return 1
@@ -172,7 +199,10 @@ install_gacp() {
                 -H 'Cache-Control: no-cache, no-store, must-revalidate' \
                 -H 'Pragma: no-cache' \
                 -H 'Expires: 0' \
-                "$GACP_REPO_URL?$(date +%s)" -o "$gacp_file"; then
+                -H 'If-None-Match: *' \
+                -H 'If-Modified-Since: Thu, 01 Jan 1970 00:00:00 GMT' \
+                -A "gacp-installer/$GACP_VERSION-$(date +%s%N)" \
+                "$GACP_REPO_URL?nocache=$(date +%s%N)&rand=$((RANDOM % 10000))" -o "$gacp_file"; then
                 log_error "Failed to download gacp script"
                 return 1
             fi
